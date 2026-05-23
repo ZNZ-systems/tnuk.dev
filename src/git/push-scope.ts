@@ -5,8 +5,6 @@ import { join } from "node:path";
 import type { ReviewScope } from "../types.js";
 
 const ZERO_SHA = "0".repeat(40);
-/** Git empty tree — used when reviewing the first commit in a repo. */
-export const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 function git(cwd: string, args: string[]): string {
   try {
@@ -37,50 +35,6 @@ function findRepoRoot(startDir: string): string {
     }
     dir = parent;
   }
-}
-
-/**
- * Ensures fromSha..toSha is a non-empty range. Uses parent commit or empty tree.
- */
-export function normalizeReviewRange(
-  repoRoot: string,
-  fromSha: string,
-  toSha: string,
-): { fromSha: string; toSha: string } {
-  if (fromSha !== toSha) {
-    return { fromSha, toSha };
-  }
-
-  const parent = gitTry(repoRoot, ["rev-parse", `${toSha}^`]);
-  if (parent) {
-    return { fromSha: parent, toSha };
-  }
-
-  return { fromSha: EMPTY_TREE_SHA, toSha };
-}
-
-function buildScope(
-  repoRoot: string,
-  branch: string,
-  baseRef: string,
-  fromSha: string,
-  toSha: string,
-  descriptionPrefix: string,
-): ReviewScope {
-  const normalized = normalizeReviewRange(repoRoot, fromSha, toSha);
-  const description =
-    normalized.fromSha === EMPTY_TREE_SHA
-      ? `${descriptionPrefix} (initial commit ${normalized.toSha.slice(0, 7)})`
-      : `${descriptionPrefix} (${normalized.fromSha.slice(0, 7)}..${normalized.toSha.slice(0, 7)})`;
-
-  return {
-    repoRoot,
-    branch,
-    baseRef,
-    fromSha: normalized.fromSha,
-    toSha: normalized.toSha,
-    description,
-  };
 }
 
 /**
@@ -118,7 +72,7 @@ function currentBranch(repoRoot: string): string {
 }
 
 /**
- * Builds review scope for manual `tnuk review` runs.
+ * Builds review scope for manual `thermo-review review` runs.
  */
 export function scopeForManualReview(
   cwd: string,
@@ -127,9 +81,7 @@ export function scopeForManualReview(
   const repoRoot = findRepoRoot(cwd);
   const headSha = gitTry(repoRoot, ["rev-parse", "HEAD"]);
   if (!headSha) {
-    throw new Error(
-      "Repository has no commits yet. Make an initial commit before running tnuk.",
-    );
+    throw new Error("Repository has no commits yet. Make an initial commit before running thermo-review.");
   }
   const baseRef = detectBaseRef(repoRoot, baseOverride);
   const branch = currentBranch(repoRoot);
@@ -138,14 +90,11 @@ export function scopeForManualReview(
   const mergeBase = gitTry(repoRoot, ["merge-base", "HEAD", baseRef]);
   const fromSha = mergeBase ?? git(repoRoot, ["rev-parse", baseRef]);
 
-  return buildScope(
-    repoRoot,
-    branch,
-    baseRef,
-    fromSha,
-    toSha,
-    `branch ${branch} vs ${mergeBase ? `merge-base with ${baseRef}` : baseRef}`,
-  );
+  const description = mergeBase
+    ? `branch ${branch} vs merge-base with ${baseRef} (${fromSha.slice(0, 7)}..${toSha.slice(0, 7)})`
+    : `branch ${branch} vs ${baseRef} (${fromSha.slice(0, 7)}..${toSha.slice(0, 7)})`;
+
+  return { repoRoot, branch, baseRef, fromSha, toSha, description };
 }
 
 export interface PrePushLine {
@@ -194,6 +143,10 @@ export function scopeForPrePush(
   const branch = currentBranch(repoRoot);
   const pushLines = parsePrePushStdin(stdin);
 
+  if (pushLines.length === 0) {
+    return scopeForManualReview(cwd, baseOverride);
+  }
+
   const line = pushLines[0];
   if (!line) {
     return scopeForManualReview(cwd, baseOverride);
@@ -204,25 +157,25 @@ export function scopeForPrePush(
 
   if (remoteSha === ZERO_SHA) {
     const mergeBase = gitTry(repoRoot, ["merge-base", localSha, baseRef]);
-    const fromSha = mergeBase ?? gitTry(repoRoot, ["rev-parse", baseRef]) ?? EMPTY_TREE_SHA;
-    return buildScope(
+    const fromSha = mergeBase ?? git(repoRoot, ["rev-parse", baseRef]);
+    return {
       repoRoot,
       branch,
       baseRef,
       fromSha,
       toSha,
-      `new branch push ${branch}`,
-    );
+      description: `new branch push ${branch} (${fromSha.slice(0, 7)}..${toSha.slice(0, 7)})`,
+    };
   }
 
-  return buildScope(
+  return {
     repoRoot,
     branch,
     baseRef,
-    remoteSha,
+    fromSha: remoteSha,
     toSha,
-    `push on ${branch}`,
-  );
+    description: `push ${remoteSha.slice(0, 7)}..${localSha.slice(0, 7)} on ${branch}`,
+  };
 }
 
 export { findRepoRoot };

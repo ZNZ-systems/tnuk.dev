@@ -1,8 +1,8 @@
-# Contributing to tnuk
+# Contributing
 
-Thanks for helping improve tnuk.
+Thanks for helping improve thermo-review.
 
-## Setup
+## Development setup
 
 ```bash
 git clone https://github.com/pzep1/thermo-review-cli.git
@@ -12,27 +12,28 @@ npm run build
 npm link
 ```
 
-For paid auth flows against a local web app:
+## Making changes
 
-```bash
-cd web && npm install && npm run dev
-export TNUK_API_URL=http://localhost:3000
-tnuk login
-```
+1. Edit TypeScript under `src/`
+2. Run `npm run build`
+3. Test manually:
 
-## Before opening a PR
-
-1. `npm test`
-2. Manual smoke (in a git repo with subscription or `SKIP_BILLING_CHECK=1` on web):
    ```bash
-   tnuk review --help
-   tnuk review
+   thermo-review review --help
+   thermo-review review   # in a git repo with CURSOR_API_KEY set
    ```
+
+## Pull requests
+
+- Keep diffs focused
+- Update README if CLI flags or behavior change
+- Do not commit secrets or `.env` files
 
 ## Reporting issues
 
 Include:
 
-- `tnuk --version`
-- OS and Node version
-- Relevant stderr output (redact tokens)
+- OS and Node version (`node -v`)
+- Output of `thermo-review --version`
+- Whether you use `hook install` or `--global-hooks-path`
+- Redacted error output (never paste API keys)

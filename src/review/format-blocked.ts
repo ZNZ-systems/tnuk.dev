@@ -51,10 +51,10 @@ export function formatBlockedOutput(
 }
 
 /**
- * Writes last review to .git/tnuk-last.md for re-copy.
+ * Writes last review to .git/thermo-review-last.md for re-copy.
  */
 export function writeLastReview(repoRoot: string, content: string): void {
-  const path = join(repoRoot, ".git", "tnuk-last.md");
+  const path = join(repoRoot, ".git", "thermo-review-last.md");
   writeFileSync(path, content, "utf8");
 }
 

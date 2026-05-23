@@ -10,10 +10,14 @@ const PACKAGE_ROOT = join(__dirname, "..", "..");
 const TEMPLATE_HOOK = join(PACKAGE_ROOT, "templates", "hooks", "pre-push");
 
 function bundledPrePushContent(): string {
-  if (!existsSync(TEMPLATE_HOOK)) {
-    throw new Error(`Missing hook template at ${TEMPLATE_HOOK}. Reinstall tnuk.`);
+  if (existsSync(TEMPLATE_HOOK)) {
+    return readFileSync(TEMPLATE_HOOK, "utf8");
   }
-  return readFileSync(TEMPLATE_HOOK, "utf8");
+  return `#!/bin/sh
+command -v thermo-review >/dev/null 2>&1 || exit 0
+[ -n "$THERMO_REVIEW_SKIP" ] && exit 0
+exec thermo-review hook run
+`;
 }
 
 /**
@@ -48,19 +52,19 @@ export function installHook(globalHooksPath: boolean): void {
   } else {
     process.stdout.write(
       "New repos will inherit the hook via init.templateDir.\n" +
-        "For existing repos, run: tnuk hook install --global-hooks-path\n",
+        "For existing repos, run: thermo-review hook install --global-hooks-path\n",
     );
   }
 }
 
 /**
- * Removes tnuk git template configuration.
+ * Removes thermo-review git template configuration.
  */
 export function uninstallHook(): void {
   const hookPath = join(GIT_TEMPLATE_HOOKS_DIR, "pre-push");
   if (existsSync(hookPath)) {
     const content = readFileSync(hookPath, "utf8");
-    if (content.includes("tnuk") || content.includes("thermo-review")) {
+    if (content.includes("thermo-review")) {
       unlinkSync(hookPath);
       process.stdout.write(`Removed ${hookPath}\n`);
     }
