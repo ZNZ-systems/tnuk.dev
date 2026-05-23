@@ -1,0 +1,49 @@
+{
+  "name": "thermo-review-cli",
+  "version": "0.1.0",
+  "description": "Pre-push thermo-nuclear code quality review via Cursor SDK",
+  "type": "module",
+  "license": "MIT",
+  "author": "Panos Zepos",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pzep1/thermo-review-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pzep1/thermo-review-cli/issues"
+  },
+  "homepage": "https://github.com/pzep1/thermo-review-cli#readme",
+  "keywords": [
+    "cursor",
+    "cursor-sdk",
+    "git-hooks",
+    "pre-push",
+    "code-review",
+    "cli"
+  ],
+  "bin": {
+    "thermo-review": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepare": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@cursor/sdk": "^1.0.13",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  }
+}
