@@ -1,7 +1,7 @@
 {
-  "name": "thermo-review-cli",
-  "version": "0.1.0",
-  "description": "Pre-push thermo-nuclear code quality review via Cursor SDK",
+  "name": "tnuk",
+  "version": "0.2.0",
+  "description": "Pre-push thermo-nuclear code quality review — tnuk.dev",
   "type": "module",
   "license": "MIT",
   "author": "Panos Zepos",
@@ -12,8 +12,9 @@
   "bugs": {
     "url": "https://github.com/pzep1/thermo-review-cli/issues"
   },
-  "homepage": "https://github.com/pzep1/thermo-review-cli#readme",
+  "homepage": "https://tnuk.dev",
   "keywords": [
+    "tnuk",
     "cursor",
     "cursor-sdk",
     "git-hooks",
@@ -22,17 +23,19 @@
     "cli"
   ],
   "bin": {
-    "thermo-review": "./dist/cli.js"
+    "tnuk": "./dist/cli.js"
   },
   "files": [
     "dist",
     "templates",
+    "skills",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "test": "npm run build && node --test dist/config.test.js dist/auth/session.test.js",
     "prepare": "npm run build"
   },
   "engines": {

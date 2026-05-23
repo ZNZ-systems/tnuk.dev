@@ -1,0 +1,17 @@
+{
+  "billing": {
+    "enabled": true,
+    "plans": [
+      {
+        "slug": "pro",
+        "name": "Pro",
+        "amount": 4000,
+        "currency": "usd",
+        "payer_type": "user",
+        "is_recurring": true,
+        "trial_period_days": 7,
+        "description": "Unlimited pre-push thermo-nuclear reviews"
+      }
+    ]
+  }
+}

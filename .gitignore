@@ -2,3 +2,9 @@ node_modules/
 dist/
 *.log
 .DS_Store
+.env
+.env.local
+web/.env.local
+web/node_modules/
+web/.next/
+.projects/

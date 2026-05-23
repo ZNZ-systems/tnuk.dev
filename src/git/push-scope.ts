@@ -118,7 +118,7 @@ function currentBranch(repoRoot: string): string {
 }
 
 /**
- * Builds review scope for manual `thermo-review review` runs.
+ * Builds review scope for manual `tnuk review` runs.
  */
 export function scopeForManualReview(
   cwd: string,
@@ -128,7 +128,7 @@ export function scopeForManualReview(
   const headSha = gitTry(repoRoot, ["rev-parse", "HEAD"]);
   if (!headSha) {
     throw new Error(
-      "Repository has no commits yet. Make an initial commit before running thermo-review.",
+      "Repository has no commits yet. Make an initial commit before running tnuk.",
     );
   }
   const baseRef = detectBaseRef(repoRoot, baseOverride);

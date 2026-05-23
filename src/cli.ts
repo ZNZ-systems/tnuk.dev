@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 
 import { Command } from "commander";
 
+import { clearAuthToken } from "./auth/token.js";
+import { fetchWhoami, runLogin } from "./auth/login.js";
 import { shouldSkipReview } from "./config.js";
 import { scopeForManualReview, scopeForPrePush } from "./git/push-scope.js";
 import { chainLocalHook, installHook, uninstallHook } from "./hook/install.js";
@@ -19,9 +21,42 @@ async function readStdin(): Promise<string> {
 const program = new Command();
 
 program
-  .name("thermo-review")
-  .description("Thermo-nuclear code quality review via Cursor SDK (pre-push gate)")
-  .version("0.1.0");
+  .name("tnuk")
+  .description("Pre-push thermo-nuclear code quality review (tnuk.dev)")
+  .version("0.2.0");
+
+program
+  .command("login")
+  .description("Sign in to tnuk (opens browser or device code in SSH)")
+  .option("--device", "Force device-code login flow")
+  .action(async (opts: { device?: boolean }) => {
+    await runLogin(Boolean(opts.device));
+  });
+
+program
+  .command("logout")
+  .description("Sign out and remove local credentials")
+  .action(() => {
+    clearAuthToken();
+    process.stdout.write("Signed out of tnuk.\n");
+  });
+
+program
+  .command("whoami")
+  .description("Show signed-in account and subscription status")
+  .action(async () => {
+    const info = await fetchWhoami();
+    if (!info) {
+      process.stderr.write('tnuk: not signed in. Run "tnuk login"\n');
+      process.exit(1);
+    }
+    if (info.email) {
+      process.stdout.write(`${info.email}\n`);
+    }
+    if (info.plan) {
+      process.stdout.write(`plan: ${info.plan}\n`);
+    }
+  });
 
 program
   .command("review")
@@ -58,7 +93,7 @@ hookCmd
 
 hookCmd
   .command("uninstall")
-  .description("Remove thermo-review hook and git template config")
+  .description("Remove tnuk hook and git template config")
   .action(() => {
     uninstallHook();
   });
@@ -92,14 +127,15 @@ program.addHelpText(
   "after",
   `
 Examples:
-  thermo-review review
-  thermo-review review --base main --json
-  thermo-review hook install --global-hooks-path
-  THERMO_REVIEW_SKIP=1 git push
+  tnuk login
+  tnuk review
+  tnuk review --base main --json
+  tnuk hook install --global-hooks-path
+  TNUK_SKIP=1 git push
 
 Environment:
-  CURSOR_API_KEY          Cursor API key (required)
-  THERMO_REVIEW_SKIP=1    Skip review, allow push
+  TNUK_SKIP=1             Skip review, allow push
+  TNUK_API_URL            Override API base (default: https://tnuk.dev)
 `,
 );
 

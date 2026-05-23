@@ -1,6 +1,7 @@
 import { Agent, CursorAgentError, type SDKMessage } from "@cursor/sdk";
 
-import { loadApiKey, loadSkillContent } from "../config.js";
+import { exchangeAuthToken, sessionFailureExit } from "../auth/session.js";
+import { loadSkillContent } from "../config.js";
 import type { ReviewOutputOptions, ReviewResult, ReviewScope } from "../types.js";
 import {
   formatBlockedOutput,
@@ -11,7 +12,7 @@ import { parseVerdict } from "./parse-verdict.js";
 import { buildReviewPrompt } from "./prompt.js";
 
 function logProgress(message: string): void {
-  process.stderr.write(`[thermo-review] ${message}\n`);
+  process.stderr.write(`[tnuk] ${message}\n`);
 }
 
 async function streamReviewText(stream: AsyncGenerator<SDKMessage, void>): Promise<string> {
@@ -50,14 +51,9 @@ export async function runReview(
   scope: ReviewScope,
   options: ReviewOutputOptions & { failClosed?: boolean },
 ): Promise<{ exitCode: number; result?: ReviewResult }> {
-  const apiKey = loadApiKey();
-  if (!apiKey) {
-    process.stderr.write(
-      "Error: CURSOR_API_KEY not set.\n" +
-        "  export CURSOR_API_KEY=\"cursor_...\"\n" +
-        "  or add it to ~/.config/thermo-review/env\n",
-    );
-    return { exitCode: 1 };
+  const session = await exchangeAuthToken();
+  if (!session.ok) {
+    return { exitCode: sessionFailureExit(session) };
   }
 
   let skillContent: string;
@@ -65,12 +61,13 @@ export async function runReview(
     skillContent = loadSkillContent();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`Error: ${message}\n`);
+    process.stderr.write(`tnuk: ${message}\n`);
     return { exitCode: 1 };
   }
 
   const prompt = buildReviewPrompt(skillContent, scope);
   const failClosed = options.failClosed ?? true;
+  const apiKey = session.cursorApiKey;
 
   logProgress(`Reviewing ${scope.description}`);
 
@@ -93,7 +90,7 @@ export async function runReview(
     const rawText = streamedText || waitResult.result || run.result || "";
 
     if (waitResult.status === "error") {
-      process.stderr.write(`Error: agent run failed (${waitResult.id})\n`);
+      process.stderr.write(`tnuk: agent run failed (${waitResult.id})\n`);
       return { exitCode: 2 };
     }
 
@@ -132,9 +129,11 @@ export async function runReview(
     };
   } catch (err) {
     if (err instanceof CursorAgentError) {
-      process.stderr.write(
-        `Error: SDK startup failed: ${err.message} (retryable=${String(err.isRetryable)})\n`,
-      );
+      if (err.isRetryable) {
+        process.stderr.write("tnuk: skipped (Cursor service unavailable)\n");
+        return { exitCode: 0 };
+      }
+      process.stderr.write(`tnuk: SDK startup failed: ${err.message}\n`);
       return { exitCode: 1 };
     }
     throw err;

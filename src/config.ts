@@ -1,81 +1,60 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ENV_FILE = join(homedir(), ".config", "thermo-review", "env");
-const SKILL_NAME = "thermo-nuclear-code-quality-review";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = join(__dirname, "..");
 
+export const CONFIG_DIR = join(homedir(), ".config", "tnuk");
+export const AUTH_FILE = join(CONFIG_DIR, "auth.json");
 export const GIT_TEMPLATE_DIR = join(homedir(), ".git-templates");
 export const GIT_TEMPLATE_HOOKS_DIR = join(GIT_TEMPLATE_DIR, "hooks");
 
+/** Bundled rubric version — bump when re-vendoring SKILL.md. */
+export const RUBRIC_VERSION = "1.0.0";
+
+const BUNDLED_SKILL = join(PACKAGE_ROOT, "skills", "thermo-nuclear-code-quality-review.md");
+
 /**
- * Loads CURSOR_API_KEY from env or ~/.config/thermo-review/env.
+ * API base URL for tnuk auth/session. Override with TNUK_API_URL for local dev.
  */
-export function loadApiKey(): string | undefined {
-  const fromEnv = process.env["CURSOR_API_KEY"]?.trim();
-  if (fromEnv) {
-    return fromEnv;
+export function apiBaseUrl(): string {
+  const override = process.env["TNUK_API_URL"]?.trim();
+  if (override) {
+    return override.replace(/\/$/, "");
   }
-
-  if (!existsSync(ENV_FILE)) {
-    return undefined;
-  }
-
-  const lines = readFileSync(ENV_FILE, "utf8").split("\n");
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-    const match = /^export\s+CURSOR_API_KEY=(.+)$/.exec(trimmed);
-    if (match?.[1]) {
-      return match[1].replace(/^["']|["']$/g, "");
-    }
-    const plain = /^CURSOR_API_KEY=(.+)$/.exec(trimmed);
-    if (plain?.[1]) {
-      return plain[1].replace(/^["']|["']$/g, "");
-    }
-  }
-
-  return undefined;
+  return "https://tnuk.dev";
 }
 
 /**
- * Discovers thermo-nuclear skill under cursor-team-kit plugin cache (any version hash).
+ * Builds a full API URL from a path segment.
  */
-export function findSkillPath(): string {
-  const override = process.env["THERMO_REVIEW_SKILL_PATH"]?.trim();
-  if (override && existsSync(override)) {
-    return override;
-  }
-
-  const kitRoot = join(homedir(), ".cursor", "plugins", "cache", "cursor-public", "cursor-team-kit");
-  if (!existsSync(kitRoot)) {
-    throw new Error(
-      `cursor-team-kit plugin not found at ${kitRoot}. Install it in Cursor Settings → Plugins.`,
-    );
-  }
-
-  for (const versionDir of readdirSync(kitRoot)) {
-    const candidate = join(kitRoot, versionDir, "skills", SKILL_NAME, "SKILL.md");
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw new Error(
-    `Thermo-nuclear skill not found under ${kitRoot}. Install the cursor-team-kit plugin in Cursor.`,
-  );
+export function apiUrl(path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${apiBaseUrl()}${normalized}`;
 }
 
 /**
- * Resolves the thermo-nuclear skill markdown from the Cursor plugins cache.
+ * Loads the vendored thermo-nuclear skill markdown.
  */
 export function loadSkillContent(): string {
-  const path = findSkillPath();
-  return readFileSync(path, "utf8");
+  const override = process.env["TNUK_SKILL_PATH"]?.trim();
+  if (override && existsSync(override)) {
+    return readFileSync(override, "utf8");
+  }
+  if (!existsSync(BUNDLED_SKILL)) {
+    throw new Error(
+      `Bundled skill not found at ${BUNDLED_SKILL}. Reinstall tnuk: npm install -g tnuk`,
+    );
+  }
+  return readFileSync(BUNDLED_SKILL, "utf8");
 }
 
 export function shouldSkipReview(explicitSkip: boolean): boolean {
-  return explicitSkip || process.env["THERMO_REVIEW_SKIP"] === "1";
+  return (
+    explicitSkip ||
+    process.env["TNUK_SKIP"] === "1" ||
+    process.env["THERMO_REVIEW_SKIP"] === "1"
+  );
 }
