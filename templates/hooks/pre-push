@@ -5,10 +5,12 @@
 command -v thermo-review >/dev/null 2>&1 || exit 0
 [ -n "$THERMO_REVIEW_SKIP" ] && exit 0
 
-# Optional: source API key from config file
+# Optional: source API key from config file (ignore syntax errors)
 if [ -f "$HOME/.config/thermo-review/env" ]; then
+  set -a
   # shellcheck disable=SC1091
-  . "$HOME/.config/thermo-review/env"
+  . "$HOME/.config/thermo-review/env" 2>/dev/null || true
+  set +a
 fi
 
 exec thermo-review hook run

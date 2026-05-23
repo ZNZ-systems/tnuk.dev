@@ -10,14 +10,10 @@ const PACKAGE_ROOT = join(__dirname, "..", "..");
 const TEMPLATE_HOOK = join(PACKAGE_ROOT, "templates", "hooks", "pre-push");
 
 function bundledPrePushContent(): string {
-  if (existsSync(TEMPLATE_HOOK)) {
-    return readFileSync(TEMPLATE_HOOK, "utf8");
+  if (!existsSync(TEMPLATE_HOOK)) {
+    throw new Error(`Missing hook template at ${TEMPLATE_HOOK}. Reinstall thermo-review-cli.`);
   }
-  return `#!/bin/sh
-command -v thermo-review >/dev/null 2>&1 || exit 0
-[ -n "$THERMO_REVIEW_SKIP" ] && exit 0
-exec thermo-review hook run
-`;
+  return readFileSync(TEMPLATE_HOOK, "utf8");
 }
 
 /**
