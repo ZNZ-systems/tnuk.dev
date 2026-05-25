@@ -27,7 +27,7 @@ class_name = "DeviceHandoff"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["DeviceHandoff"]
+new_sqlite_classes = ["DeviceHandoff"]
 
 # Custom domain — DNS is a CNAME at Vercel; Cloudflare registers the hostname on deploy.
 [[routes]]
