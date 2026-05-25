@@ -96,3 +96,37 @@ export async function setDevice(
     expirationTtl: DEVICE_TTL_SECONDS,
   });
 }
+
+export type DevicePollResult =
+  | { status: "pending" | "denied" | "consumed" | "expired" }
+  | { status: "authorized"; token: string; expiresAt?: number; account?: string };
+
+/**
+ * Hands off an authorized device token exactly once. Marks the device consumed
+ * and strips the token from KV before returning credentials to the caller.
+ */
+export async function consumeAuthorizedDevice(
+  env: Env,
+  deviceCode: string,
+): Promise<DevicePollResult> {
+  const state = await getDevice(env, deviceCode);
+  if (!state) return { status: "expired" };
+  if (state.status === "consumed") return { status: "consumed" };
+  if (state.status !== "authorized" || !state.token) {
+    return { status: state.status === "denied" ? "denied" : "pending" };
+  }
+
+  const { token, expiresAt, account } = state;
+  const consumed: DeviceState = {
+    userCode: state.userCode,
+    status: "consumed",
+  };
+  if (expiresAt !== undefined) consumed.expiresAt = expiresAt;
+  if (account !== undefined) consumed.account = account;
+  await setDevice(env, deviceCode, consumed);
+
+  const authorized: Extract<DevicePollResult, { status: "authorized" }> = { status: "authorized", token };
+  if (expiresAt !== undefined) authorized.expiresAt = expiresAt;
+  if (account !== undefined) authorized.account = account;
+  return authorized;
+}

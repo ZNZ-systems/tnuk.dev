@@ -3,10 +3,11 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 
 import type { Env } from "./env.js";
-import { bearer, mintSeatToken, verifySeatToken } from "./jwt.js";
+import { bearer, mintSeatToken } from "./jwt.js";
+import { requireActiveSeat } from "./seat-gate.js";
 import {
+  consumeAuthorizedDevice,
   createDevice,
-  getDevice,
   getDeviceByUserCode,
   orgHasActiveSeat,
   setDevice,
@@ -96,27 +97,14 @@ app.post("/auth/device/poll", async (c) => {
   const deviceCode = body.deviceCode;
   if (!deviceCode) return c.json({ error: "missing deviceCode" }, 400);
 
-  const state = await getDevice(c.env, deviceCode);
-  if (!state) return c.json({ status: "expired" });
-  if (state.status !== "authorized") return c.json({ status: state.status });
-
-  // Hand the token over exactly once, then mark consumed.
-  await setDevice(c.env, deviceCode, { ...state, status: "consumed" });
-  return c.json({
-    status: "authorized",
-    token: state.token,
-    expiresAt: state.expiresAt,
-    account: state.account,
-  });
+  const result = await consumeAuthorizedDevice(c.env, deviceCode);
+  return c.json(result);
 });
 
 app.get("/auth/whoami", async (c) => {
-  const token = bearer(c.req.raw);
-  const seat = token ? await verifySeatToken(token, c.env.TNUK_JWT_SECRET) : null;
-  if (!seat) return c.json({ error: "not logged in" }, 401);
-  if (!(await orgHasActiveSeat(c.env, seat.orgId))) {
-    return c.json({ error: "seat inactive" }, 402);
-  }
+  const gate = await requireActiveSeat(c.req.raw, c.env);
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
+  const { seat } = gate;
   return c.json({ account: seat.account ?? seat.userId, org: seat.orgId, seat: "active" });
 });
 
@@ -129,12 +117,8 @@ app.post("/webhooks/clerk", (c) => handleClerkWebhook(c.req.raw, c.env));
 const HOP_BY_HOP = new Set(["host", "content-length", "connection", "transfer-encoding"]);
 
 app.all("*", async (c) => {
-  const token = bearer(c.req.raw);
-  const seat = token ? await verifySeatToken(token, c.env.TNUK_JWT_SECRET) : null;
-  if (!seat) return c.json({ error: "unauthorized" }, 401);
-  if (!(await orgHasActiveSeat(c.env, seat.orgId))) {
-    return c.json({ error: "no active seat — ask your org admin to assign one" }, 402);
-  }
+  const gate = await requireActiveSeat(c.req.raw, c.env);
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
 
   const url = new URL(c.req.url);
   const target = `${c.env.CURSOR_UPSTREAM}${url.pathname}${url.search}`;
