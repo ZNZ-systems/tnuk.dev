@@ -53,8 +53,8 @@ export function BillingPage() {
         </motion.span>
         <motion.h1 variants={fadeUp}>{organization.name}</motion.h1>
         <motion.p variants={fadeUp}>
-          Manage your Team plan ($40 per seat / month), invite developers, and assign seats. Each dev
-          runs <code>tnuk login</code> once to activate their machine.
+          Manage your Team plan ($40 per seat / month), invite developers, and keep your subscription
+          active. Each dev runs <code>tnuk login</code> once to activate their machine.
         </motion.p>
       </motion.div>
       <PlanSection />

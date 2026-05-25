@@ -5,7 +5,6 @@ export interface OrgSubscription {
   plan: string;
   /** Clerk subscription status: active | past_due | canceled | ... */
   status: string;
-  seatQuantity?: number;
   updatedAt: number;
 }
 
@@ -32,7 +31,7 @@ function planMatches(planSlug: string, required: string): boolean {
 }
 
 /** True when the org holds an active subscription to the required plan. */
-export async function orgHasActiveSeat(env: Env, orgId: string): Promise<boolean> {
+export async function orgHasActiveSubscription(env: Env, orgId: string): Promise<boolean> {
   const sub = await getOrgSubscription(env, orgId);
   if (!sub) return false;
   if (!ACTIVE_STATUSES.has(sub.status)) return false;

@@ -13,7 +13,7 @@ interface DeviceStartResponse {
 }
 
 interface DevicePollResponse {
-  status: "pending" | "authorized" | "expired" | "denied";
+  status: "pending" | "authorized" | "expired" | "denied" | "consumed";
   token?: string;
   expiresAt?: number;
   account?: string;
@@ -99,7 +99,7 @@ export async function login(): Promise<number> {
       process.stdout.write(`\n\nLogged in${poll.account ? ` as ${poll.account}` : ""}.\n`);
       return 0;
     }
-    if (poll.status === "denied" || poll.status === "expired") {
+    if (poll.status === "denied" || poll.status === "expired" || poll.status === "consumed") {
       process.stdout.write(`\n\nAuthorization ${poll.status}. Run \`tnuk login\` again.\n`);
       return 1;
     }
@@ -131,7 +131,7 @@ export async function whoami(): Promise<number> {
       headers: { authorization: `Bearer ${auth.token}` },
     });
     if (res.status === 401 || res.status === 402 || res.status === 403) {
-      process.stdout.write("Seat inactive. Ask your org admin to assign a seat, or run `tnuk login`.\n");
+      process.stdout.write("Access inactive. Ask your org admin to confirm your team subscription, or run `tnuk login`.\n");
       return 1;
     }
     if (!res.ok) {

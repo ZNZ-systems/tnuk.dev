@@ -10,7 +10,7 @@ import {
   getDeviceByUserCode,
   setDevice,
 } from "./devices.js";
-import { orgHasActiveSeat } from "./subscriptions.js";
+import { orgHasActiveSubscription } from "./subscriptions.js";
 import { handleClerkWebhook } from "./webhooks.js";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -62,7 +62,7 @@ app.post("/auth/device/approve", async (c) => {
   if (!orgId) {
     return c.json({ error: "no active organization — select your team first" }, 400);
   }
-  if (!(await orgHasActiveSeat(c.env, orgId))) {
+  if (!(await orgHasActiveSubscription(c.env, orgId))) {
     return c.json({ error: "organization has no active tnuk subscription" }, 402);
   }
 

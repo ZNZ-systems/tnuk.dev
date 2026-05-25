@@ -27,7 +27,7 @@ function writeSeatInactiveError(): void {
   process.stderr.write(
     "Error: your tnuk seat is not active.\n" +
       "  - Run `tnuk login` to re-authenticate, or\n" +
-      "  - Ask your org admin to assign you a seat at https://tnuk.dev\n",
+      "  - Ask your org admin to confirm your team subscription at https://tnuk.dev\n",
   );
 }
 
