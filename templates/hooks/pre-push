@@ -1,6 +1,6 @@
 #!/bin/sh
 # tnuk pre-push hook
-# Installed to ~/.git-templates/hooks/pre-push by: tnuk hook install
+# Installed to ~/.git-templates/hooks/pre-push by npm install or: tnuk hook install
 
 command -v tnuk >/dev/null 2>&1 || exit 0
 [ -n "$TNUK_SKIP" ] && exit 0

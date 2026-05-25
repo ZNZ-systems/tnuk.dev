@@ -13,7 +13,7 @@ import { UserMenu } from "./components/UserMenu.tsx";
 import { easeOut } from "./motion.ts";
 import "./landing.css";
 
-const INSTALL_CMD = "npm i -g tnuk && tnuk hook install --global-hooks-path";
+const INSTALL_CMD = "npm i -g tnuk.dev";
 
 /**
  * Reveal-on-scroll, fail-open. Defaults to visible if IntersectionObserver is

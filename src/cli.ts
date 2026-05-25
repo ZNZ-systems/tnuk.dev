@@ -69,13 +69,9 @@ const hookCmd = program.command("hook").description("Manage pre-push git hook");
 
 hookCmd
   .command("install")
-  .description("Install user-level git template pre-push hook")
-  .option(
-    "--global-hooks-path",
-    "Set git config core.hooksPath globally (applies to all existing repos)",
-  )
-  .action((opts: { globalHooksPath?: boolean }) => {
-    installHook(Boolean(opts.globalHooksPath));
+  .description("Install user-level git template pre-push hook (also runs on npm install)")
+  .action(() => {
+    installHook();
   });
 
 hookCmd
@@ -117,7 +113,7 @@ Examples:
   tnuk login
   tnuk review
   tnuk review --base main --json
-  tnuk hook install --global-hooks-path
+  tnuk hook install
   TNUK_SKIP=1 git push
 
 Environment:

@@ -45,11 +45,13 @@
     "build:worker": "npm run typecheck -w tnuk-worker",
     "setup:worker": "node scripts/setup-worker.mjs",
     "setup:clerk-webhook": "node scripts/setup-clerk-webhook.mjs",
+    "setup:github-deploy": "node scripts/setup-github-deploy.mjs",
+    "setup:pages-domain": "node scripts/setup-pages-domain.mjs",
     "dev": "tsc --watch",
     "dev:dashboard": "npm run dev -w tnuk-dashboard",
     "typecheck": "npm run build:worker && npm run build:dashboard",
     "prepublishOnly": "npm run build",
-    "prepare": "npm run build"
+    "prepare": "npm run build && node scripts/install-hook.mjs"
   },
   "engines": {
     "node": ">=20"

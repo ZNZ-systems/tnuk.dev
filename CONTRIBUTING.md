@@ -35,5 +35,5 @@ Include:
 
 - OS and Node version (`node -v`)
 - Output of `thermo-review --version`
-- Whether you use `hook install` or `--global-hooks-path`
+- Whether hook install ran automatically or you used `hook install` manually
 - Redacted error output (never paste API keys)
