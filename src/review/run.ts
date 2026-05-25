@@ -50,10 +50,6 @@ async function withSeatBackend<T>(baseUrl: string, fn: () => Promise<T>): Promis
   process.env["CURSOR_BACKEND_URL"] = baseUrl;
   try {
     return await fn();
-  } catch (err) {
-    const seatErr = mapSeatProxyError(err);
-    if (seatErr) throw seatErr;
-    throw err;
   } finally {
     if (prevBase === undefined) delete process.env["CURSOR_API_BASE_URL"];
     else process.env["CURSOR_API_BASE_URL"] = prevBase;
@@ -209,6 +205,8 @@ async function runReviewAgent(args: {
       result: reviewResult,
     };
   } catch (err) {
+    const seatErr = mapSeatProxyError(err);
+    if (seatErr) throw seatErr;
     if (err instanceof CursorSdkError || err instanceof CursorAgentError) {
       process.stderr.write(
         `Error: review failed: ${err.message} (retryable=${String(err.isRetryable)})\n`,
