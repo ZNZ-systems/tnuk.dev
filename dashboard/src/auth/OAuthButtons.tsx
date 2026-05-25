@@ -68,9 +68,6 @@ export function OAuthButtons({
         </button>
       ))}
       {error && <p className="form-message form-message--error">{error}</p>}
-      <div className="auth-divider">
-        <span>or</span>
-      </div>
     </div>
   );
 }
