@@ -56,13 +56,21 @@ Install the plugin in Cursor if you have not already:
 3. Confirm the skill exists at:
    `~/.cursor/plugins/cache/cursor-public/cursor-team-kit/.../thermo-nuclear-code-quality-review/SKILL.md`
 
-### 2. Install thermo-review
+### 2. Install tnuk
 
-**From source (recommended today):**
+**From npm (recommended):**
 
 ```bash
-git clone https://github.com/pzep1/thermo-review-cli.git
-cd thermo-review-cli
+npm install -g tnuk.dev
+```
+
+This installs both `tnuk` and `thermo-review` on your PATH.
+
+**From source:**
+
+```bash
+git clone https://github.com/ZNZ-systems/tnuk.dev.git
+cd tnuk.dev
 npm install
 npm run build
 npm link

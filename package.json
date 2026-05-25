@@ -1,18 +1,21 @@
 {
-  "name": "thermo-review-cli",
+  "name": "tnuk.dev",
   "version": "0.1.0",
-  "description": "Pre-push thermo-nuclear code quality review via Cursor SDK",
+  "description": "Thermo-nuclear team code review — pre-push quality gate powered by the bundled Cursor SDK",
   "type": "module",
   "license": "MIT",
   "author": "Panos Zepos",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pzep1/thermo-review-cli.git"
+    "url": "git+https://github.com/ZNZ-systems/tnuk.dev.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "bugs": {
-    "url": "https://github.com/pzep1/thermo-review-cli/issues"
+    "url": "https://github.com/ZNZ-systems/tnuk.dev/issues"
   },
-  "homepage": "https://github.com/pzep1/thermo-review-cli#readme",
+  "homepage": "https://tnuk.dev",
   "keywords": [
     "cursor",
     "cursor-sdk",
@@ -22,17 +25,30 @@
     "cli"
   ],
   "bin": {
-    "thermo-review": "./dist/cli.js"
+    "tnuk": "dist/cli.js",
+    "thermo-review": "dist/cli.js"
   },
   "files": [
     "dist",
     "templates",
+    "skill",
     "LICENSE",
     "README.md"
   ],
+  "workspaces": [
+    "dashboard",
+    "worker"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/cli.js",
+    "build:dashboard": "npm run build -w tnuk-dashboard",
+    "build:worker": "npm run typecheck -w tnuk-worker",
+    "setup:worker": "node scripts/setup-worker.mjs",
+    "setup:clerk-webhook": "node scripts/setup-clerk-webhook.mjs",
     "dev": "tsc --watch",
+    "dev:dashboard": "npm run dev -w tnuk-dashboard",
+    "typecheck": "npm run build:worker && npm run build:dashboard",
+    "prepublishOnly": "npm run build",
     "prepare": "npm run build"
   },
   "engines": {

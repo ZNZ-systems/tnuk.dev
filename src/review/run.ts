@@ -1,6 +1,6 @@
-import { Agent, CursorAgentError, type SDKMessage } from "@cursor/sdk";
+import { Agent, CursorAgentError, CursorSdkError, type SDKMessage } from "@cursor/sdk";
 
-import { loadApiKey, loadSkillContent } from "../config.js";
+import { loadReviewCredentials, loadSkillContent, TNUK_API_BASE_URL } from "../config.js";
 import type { ReviewOutputOptions, ReviewResult, ReviewScope } from "../types.js";
 import {
   formatBlockedOutput,
@@ -50,15 +50,26 @@ export async function runReview(
   scope: ReviewScope,
   options: ReviewOutputOptions & { failClosed?: boolean },
 ): Promise<{ exitCode: number; result?: ReviewResult }> {
-  const apiKey = loadApiKey();
-  if (!apiKey) {
+  const credentials = loadReviewCredentials();
+  if (!credentials) {
     process.stderr.write(
-      "Error: CURSOR_API_KEY not set.\n" +
-        "  export CURSOR_API_KEY=\"cursor_...\"\n" +
-        "  or add it to ~/.config/thermo-review/env\n",
+      "Error: no review credentials.\n" +
+        "  Team seat: run `tnuk login`, or set TNUK_TOKEN\n" +
+        "  Local dev:  set CURSOR_API_KEY or add it to ~/.config/thermo-review/env\n",
     );
     return { exitCode: 1 };
   }
+
+  if (credentials.mode === "seat") {
+    // Route the SDK through the tnuk Worker. The worker validates the seat and
+    // injects the managed Cursor key server-side; the tnuk token is the API key.
+    process.env["CURSOR_API_BASE_URL"] = TNUK_API_BASE_URL;
+    process.env["CURSOR_BACKEND_URL"] = TNUK_API_BASE_URL;
+  } else {
+    delete process.env["CURSOR_API_BASE_URL"];
+    delete process.env["CURSOR_BACKEND_URL"];
+  }
+  const apiKey = credentials.apiKey;
 
   let skillContent: string;
   try {
@@ -80,7 +91,8 @@ export async function runReview(
       model: { id: "composer-2.5" },
       local: {
         cwd: scope.repoRoot,
-        settingSources: ["project", "plugins", "user"],
+        // Skill rubric is inlined in the prompt — skip plugins to avoid double-loading it.
+        settingSources: ["project", "user"],
       },
     });
 
@@ -131,9 +143,20 @@ export async function runReview(
       result: reviewResult,
     };
   } catch (err) {
-    if (err instanceof CursorAgentError) {
+    if (err instanceof CursorSdkError || err instanceof CursorAgentError) {
+      const status = (err as CursorSdkError).status;
+      // The tnuk Worker returns 401 (bad/expired token), 402 (no active seat),
+      // or 403 (org subscription inactive) when access is denied.
+      if (credentials.mode === "seat" && (status === 401 || status === 402 || status === 403)) {
+        process.stderr.write(
+          "Error: your tnuk seat is not active.\n" +
+            "  - Run `tnuk login` to re-authenticate, or\n" +
+            "  - Ask your org admin to assign you a seat at https://tnuk.dev\n",
+        );
+        return { exitCode: 1 };
+      }
       process.stderr.write(
-        `Error: SDK startup failed: ${err.message} (retryable=${String(err.isRetryable)})\n`,
+        `Error: review failed: ${err.message} (retryable=${String(err.isRetryable)})\n`,
       );
       return { exitCode: 1 };
     }

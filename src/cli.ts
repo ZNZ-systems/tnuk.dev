@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import { Command } from "commander";
 
+import { login, logout, whoami } from "./auth/device.js";
 import { shouldSkipReview } from "./config.js";
 import { scopeForManualReview, scopeForPrePush } from "./git/push-scope.js";
 import { chainLocalHook, installHook, uninstallHook } from "./hook/install.js";
@@ -19,9 +20,30 @@ async function readStdin(): Promise<string> {
 const program = new Command();
 
 program
-  .name("thermo-review")
-  .description("Thermo-nuclear code quality review via Cursor SDK (pre-push gate)")
+  .name("tnuk")
+  .description("Thermo-nuclear team code review — pre-push quality gate (bundled Cursor SDK)")
   .version("0.1.0");
+
+program
+  .command("login")
+  .description("Authenticate this machine to your tnuk seat")
+  .action(async () => {
+    process.exit(await login());
+  });
+
+program
+  .command("logout")
+  .description("Remove the stored tnuk seat token")
+  .action(() => {
+    process.exit(logout());
+  });
+
+program
+  .command("whoami")
+  .description("Show the current account and seat status")
+  .action(async () => {
+    process.exit(await whoami());
+  });
 
 program
   .command("review")
@@ -92,14 +114,19 @@ program.addHelpText(
   "after",
   `
 Examples:
-  thermo-review review
-  thermo-review review --base main --json
-  thermo-review hook install --global-hooks-path
-  THERMO_REVIEW_SKIP=1 git push
+  tnuk login
+  tnuk review
+  tnuk review --base main --json
+  tnuk hook install --global-hooks-path
+  TNUK_SKIP=1 git push
 
 Environment:
-  CURSOR_API_KEY          Cursor API key (required)
-  THERMO_REVIEW_SKIP=1    Skip review, allow push
+  TNUK_TOKEN              Override the stored seat token (CI use)
+  TNUK_API_BASE_URL       Override the tnuk Worker URL
+  CURSOR_API_KEY          Direct Cursor API key (local dev, bypasses tnuk seat)
+  THERMO_REVIEW_SKILL_PATH  Override bundled review skill markdown
+  TNUK_SKIP=1             Skip review, allow push
+  THERMO_REVIEW_SKIP=1    Same as TNUK_SKIP (legacy)
 `,
 );
 

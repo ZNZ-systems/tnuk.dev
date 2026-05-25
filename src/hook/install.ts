@@ -14,9 +14,10 @@ function bundledPrePushContent(): string {
     return readFileSync(TEMPLATE_HOOK, "utf8");
   }
   return `#!/bin/sh
-command -v thermo-review >/dev/null 2>&1 || exit 0
+command -v tnuk >/dev/null 2>&1 || exit 0
+[ -n "$TNUK_SKIP" ] && exit 0
 [ -n "$THERMO_REVIEW_SKIP" ] && exit 0
-exec thermo-review hook run
+exec tnuk hook run
 `;
 }
 
@@ -64,7 +65,7 @@ export function uninstallHook(): void {
   const hookPath = join(GIT_TEMPLATE_HOOKS_DIR, "pre-push");
   if (existsSync(hookPath)) {
     const content = readFileSync(hookPath, "utf8");
-    if (content.includes("thermo-review")) {
+    if (content.includes("tnuk") || content.includes("thermo-review")) {
       unlinkSync(hookPath);
       process.stdout.write(`Removed ${hookPath}\n`);
     }

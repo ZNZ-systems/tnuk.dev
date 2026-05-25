@@ -1,14 +1,9 @@
 #!/bin/sh
-# thermo-review pre-push hook
-# Installed to ~/.git-templates/hooks/pre-push by: thermo-review hook install
+# tnuk pre-push hook
+# Installed to ~/.git-templates/hooks/pre-push by: tnuk hook install
 
-command -v thermo-review >/dev/null 2>&1 || exit 0
+command -v tnuk >/dev/null 2>&1 || exit 0
+[ -n "$TNUK_SKIP" ] && exit 0
 [ -n "$THERMO_REVIEW_SKIP" ] && exit 0
 
-# Optional: source API key from config file
-if [ -f "$HOME/.config/thermo-review/env" ]; then
-  # shellcheck disable=SC1091
-  . "$HOME/.config/thermo-review/env"
-fi
-
-exec thermo-review hook run
+exec tnuk hook run

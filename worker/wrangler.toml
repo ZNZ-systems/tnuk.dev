@@ -1,0 +1,33 @@
+name = "tnuk-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "501550e5639d5031ffcbfc35702ef689"
+
+# Public vars (non-secret). Secrets are set via `wrangler secret put` or scripts/setup-worker.mjs:
+#   CLERK_SECRET_KEY         - Clerk backend API key
+#   CLERK_WEBHOOK_SECRET     - Svix signing secret from Dashboard → Webhooks
+#   CURSOR_MANAGED_API_KEY   - the single managed Cursor key (never shipped to clients)
+#   TNUK_JWT_SECRET          - HMAC secret used to sign/verify tnuk seat tokens
+[vars]
+DASHBOARD_URL = "https://tnuk.dev"
+CURSOR_UPSTREAM = "https://api2.cursor.sh"
+# Slug of the org plan that grants review access (Dashboard → Billing → Plans).
+REQUIRED_PLAN = "org:team"
+
+# KV: device-code login state + webhook-fed org subscription status.
+[[kv_namespaces]]
+binding = "TNUK_KV"
+id = "c6cd46342fe941f38604a830588193a8"
+preview_id = "14079e252db2433ba05eef84a97c6958"
+
+# Custom domain — DNS is a CNAME at Vercel; Cloudflare registers the hostname on deploy.
+[[routes]]
+pattern = "api.tnuk.dev"
+custom_domain = true
+
+# Fallback workers.dev hostname (always available):
+#   https://tnuk-api.panos-501.workers.dev
+
+# The dashboard SPA deploys separately to DASHBOARD_URL (tnuk.dev). This Worker
+# is the API host (api.tnuk.dev) only: device auth, Clerk billing webhooks, seat proxy.
