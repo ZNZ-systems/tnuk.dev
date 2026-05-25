@@ -60,7 +60,9 @@ export function SignUpPage() {
       if (result.status === "complete" && result.createdSessionId) {
         await setActive({ session: result.createdSessionId });
         window.location.replace(redirectUrl);
+        return;
       }
+      setError("Verification is not complete yet. Please check the code and try again.");
     } catch (err) {
       setError(clerkErrorMessage(err, "Verification failed"));
     } finally {

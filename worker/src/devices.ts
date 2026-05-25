@@ -6,29 +6,49 @@ export interface DeviceState {
   token?: string;
   expiresAt?: number;
   account?: string;
+  deviceExpiresAt?: number;
 }
 
 const deviceKey = (deviceCode: string) => `device:${deviceCode}`;
 const userCodeKey = (userCode: string) => `usercode:${userCode}`;
 const DEVICE_TTL_SECONDS = 600;
+const MIN_KV_EXPIRATION_SECONDS = 60;
+
+function deviceExpiration(state: DeviceState): { expiration: number } | { expirationTtl: number } | null {
+  if (state.deviceExpiresAt === undefined) {
+    return { expirationTtl: DEVICE_TTL_SECONDS };
+  }
+  const remainingMs = state.deviceExpiresAt - Date.now();
+  if (remainingMs <= 0) return null;
+  if (remainingMs < MIN_KV_EXPIRATION_SECONDS * 1000) {
+    return { expirationTtl: MIN_KV_EXPIRATION_SECONDS };
+  }
+  return { expiration: Math.ceil(state.deviceExpiresAt / 1000) };
+}
 
 export async function createDevice(
   env: Env,
   deviceCode: string,
   userCode: string,
 ): Promise<void> {
-  const state: DeviceState = { userCode, status: "pending" };
-  await env.TNUK_KV.put(deviceKey(deviceCode), JSON.stringify(state), {
-    expirationTtl: DEVICE_TTL_SECONDS,
-  });
+  const deviceExpiresAt = Date.now() + DEVICE_TTL_SECONDS * 1000;
+  const state: DeviceState = { userCode, status: "pending", deviceExpiresAt };
+  const expiration = Math.ceil(deviceExpiresAt / 1000);
+  await env.TNUK_KV.put(deviceKey(deviceCode), JSON.stringify(state), { expiration });
   await env.TNUK_KV.put(userCodeKey(userCode), deviceCode, {
-    expirationTtl: DEVICE_TTL_SECONDS,
+    expiration,
   });
 }
 
 export async function getDevice(env: Env, deviceCode: string): Promise<DeviceState | null> {
   const raw = await env.TNUK_KV.get(deviceKey(deviceCode));
-  return raw ? (JSON.parse(raw) as DeviceState) : null;
+  if (!raw) return null;
+  const state = JSON.parse(raw) as DeviceState;
+  if (state.deviceExpiresAt !== undefined && state.deviceExpiresAt <= Date.now()) {
+    await env.TNUK_KV.delete(deviceKey(deviceCode));
+    return null;
+  }
+  return state;
 }
 
 export async function getDeviceByUserCode(
@@ -46,9 +66,12 @@ export async function setDevice(
   deviceCode: string,
   state: DeviceState,
 ): Promise<void> {
-  await env.TNUK_KV.put(deviceKey(deviceCode), JSON.stringify(state), {
-    expirationTtl: DEVICE_TTL_SECONDS,
-  });
+  const expiration = deviceExpiration(state);
+  if (!expiration) {
+    await env.TNUK_KV.delete(deviceKey(deviceCode));
+    return;
+  }
+  await env.TNUK_KV.put(deviceKey(deviceCode), JSON.stringify(state), expiration);
 }
 
 export type DevicePollResult =
@@ -77,6 +100,7 @@ export async function consumeAuthorizedDevice(
   };
   if (expiresAt !== undefined) consumed.expiresAt = expiresAt;
   if (account !== undefined) consumed.account = account;
+  if (state.deviceExpiresAt !== undefined) consumed.deviceExpiresAt = state.deviceExpiresAt;
   await setDevice(env, deviceCode, consumed);
 
   const authorized: Extract<DevicePollResult, { status: "authorized" }> = { status: "authorized", token };

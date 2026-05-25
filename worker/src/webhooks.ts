@@ -66,7 +66,6 @@ export async function handleClerkWebhook(req: Request, env: Env): Promise<Respon
     // Per-seat item teardown must not cancel org-wide access; org status comes from subscription.* only.
     case "subscriptionItem.canceled":
     case "subscriptionItem.ended":
-    case "subscriptionItem.expired":
       break;
     default:
       break;

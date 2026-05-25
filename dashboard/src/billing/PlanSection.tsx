@@ -119,9 +119,10 @@ VITE_CLERK_TEAM_PLAN_ID=cplan_...`}</pre>
 }
 
 function statusPill(status: string, active: boolean): { cls: string; label: string } {
-  if (active || status === "active") return { cls: "status--active", label: "Active" };
+  if (status === "active") return { cls: "status--active", label: "Active" };
   if (status === "past_due") return { cls: "status--warn", label: "Past due" };
   if (status === "trialing") return { cls: "status--trial", label: "Trialing" };
   if (status === "canceled") return { cls: "status--warn", label: "Canceled" };
+  if (active) return { cls: "status--active", label: "Active" };
   return { cls: "status--none", label: "Not subscribed" };
 }

@@ -20,7 +20,9 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.error) {
-      if (this.props.fallback) return this.props.fallback;
+      if (this.props.fallback !== undefined && this.props.fallback !== null) {
+        return this.props.fallback;
+      }
       return (
         <main className="app-main app-main--narrow">
           <h1>Something went wrong</h1>

@@ -10,12 +10,20 @@ export class DeviceHandoff extends DurableObject<Env> {
       return new Response("Method Not Allowed", { status: 405 });
     }
 
-    const body = (await request.json()) as { deviceCode?: string };
-    if (!body.deviceCode) {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json({ error: "invalid json" }, { status: 400 });
+    }
+
+    const deviceCode =
+      body && typeof body === "object" ? (body as { deviceCode?: unknown }).deviceCode : undefined;
+    if (typeof deviceCode !== "string" || deviceCode.length === 0) {
       return Response.json({ error: "missing deviceCode" }, { status: 400 });
     }
 
-    const result = await consumeAuthorizedDevice(this.env, body.deviceCode);
+    const result = await consumeAuthorizedDevice(this.env, deviceCode);
     return Response.json(result);
   }
 }

@@ -23,21 +23,25 @@ console.error(`[probe] CURSOR_API_BASE_URL=${process.env.CURSOR_API_BASE_URL}`);
 console.error(`[probe] apiKey=${apiKey.slice(0, 10)}…`);
 
 try {
-  await using agent = await Agent.create({
+  const agent = await Agent.create({
     apiKey,
     model: { id: "composer-2.5" },
     local: { cwd: process.cwd() },
   });
-  const run = await agent.send("Reply with the single word OK.");
-  for await (const event of run.stream()) {
-    if (event.type === "assistant") {
-      for (const block of event.message.content) {
-        if (block.type === "text") process.stdout.write(block.text);
+  try {
+    const run = await agent.send("Reply with the single word OK.");
+    for await (const event of run.stream()) {
+      if (event.type === "assistant") {
+        for (const block of event.message.content) {
+          if (block.type === "text") process.stdout.write(block.text);
+        }
       }
     }
+    const result = await run.wait();
+    console.error(`\n[probe] run status: ${result.status}`);
+  } finally {
+    agent.close();
   }
-  const result = await run.wait();
-  console.error(`\n[probe] run status: ${result.status}`);
 } catch (err) {
   console.error(`\n[probe] error (expected in observe mode): ${err?.message ?? err}`);
 }

@@ -6,7 +6,7 @@
  * - deploys tnuk-api
  *
  * Clerk webhooks cannot be created via the Backend API — use Dashboard, then:
- *   node scripts/setup-clerk-webhook.mjs whsec_...
+ *   node scripts/setup-clerk-webhook.mjs
  *
  * Usage:
  *   node scripts/setup-worker.mjs
@@ -15,11 +15,12 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const localEnvPath = join(root, ".env.local");
 const workerDir = join(root, "worker");
 const WORKER_URL = "https://tnuk-api.panos-501.workers.dev";
 const WEBHOOK_URL = "https://api.tnuk.dev/webhooks/clerk";
@@ -56,6 +57,17 @@ function requireEnv(name, ...sources) {
   throw new Error(`Missing ${name}. Add it to .env.local or export it in your shell.`);
 }
 
+function persistLocalEnv(name, value) {
+  const existing = existsSync(localEnvPath) ? readFileSync(localEnvPath, "utf8") : "";
+  const assignment = `${name}=${value}`;
+  const pattern = new RegExp(`^(?:export\\s+)?${name}=.*$`, "m");
+  const next = pattern.test(existing)
+    ? existing.replace(pattern, assignment)
+    : `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${assignment}\n`;
+  writeFileSync(localEnvPath, next, { mode: 0o600 });
+  chmodSync(localEnvPath, 0o600);
+}
+
 function putSecret(name, value) {
   console.log(`→ wrangler secret put ${name}`);
   const result = spawnSync(
@@ -83,7 +95,7 @@ function deployWorker() {
 }
 
 async function main() {
-  const local = parseEnvFile(join(root, ".env.local"));
+  const local = parseEnvFile(localEnvPath);
   const thermo = parseEnvFile(join(process.env.HOME ?? "", ".config/thermo-review/env"));
 
   const clerkSecret = requireEnv("CLERK_SECRET_KEY", local, process.env);
@@ -99,10 +111,11 @@ async function main() {
     );
   }
 
-  let jwtSecret = process.env.TNUK_JWT_SECRET?.trim();
+  let jwtSecret = process.env.TNUK_JWT_SECRET?.trim() || local.TNUK_JWT_SECRET?.trim();
   if (!jwtSecret) {
     jwtSecret = randomBytes(32).toString("base64url");
-    console.log("Generated TNUK_JWT_SECRET (store this somewhere safe if you rotate later).");
+    persistLocalEnv("TNUK_JWT_SECRET", jwtSecret);
+    console.log("Generated TNUK_JWT_SECRET and saved it to .env.local for future setup runs.");
   }
 
   putSecret("CLERK_SECRET_KEY", clerkSecret);
@@ -125,8 +138,8 @@ async function main() {
   console.log(
     "             subscription.pastDue, subscriptionItem.canceled, subscriptionItem.pastDue,",
   );
-  console.log("             subscriptionItem.ended, subscriptionItem.expired");
-  console.log("  4. node scripts/setup-clerk-webhook.mjs whsec_...");
+  console.log("             subscriptionItem.ended");
+  console.log("  4. node scripts/setup-clerk-webhook.mjs");
   console.log("\nCustom domain (when tnuk.dev is on Cloudflare):");
   console.log("  Uncomment [[routes]] in worker/wrangler.toml, then npm run setup:worker");
   console.log("\nSmoke test:");

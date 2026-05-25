@@ -48,7 +48,9 @@ export function SignInPage() {
       if (result.status === "complete" && result.createdSessionId) {
         await setActive({ session: result.createdSessionId });
         window.location.replace(redirectUrl);
+        return;
       }
+      setError("Sign in needs another step that this form cannot complete yet.");
     } catch (err) {
       setError(clerkErrorMessage(err, "Sign in failed"));
     } finally {
@@ -66,7 +68,9 @@ export function SignInPage() {
       if (result.status === "complete" && result.createdSessionId) {
         await setActive({ session: result.createdSessionId });
         window.location.replace(redirectUrl);
+        return;
       }
+      setError("Verification needs another step that this form cannot complete yet.");
     } catch (err) {
       setError(clerkErrorMessage(err, "Verification failed"));
     } finally {

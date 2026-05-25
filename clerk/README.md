@@ -46,8 +46,8 @@ npm run setup:worker
 ```
 
 This reads `CLERK_SECRET_KEY` from `.env.local`, `CURSOR_API_KEY` from
-`~/.config/thermo-review/env`, generates `TNUK_JWT_SECRET`, pushes wrangler
-secrets, and deploys `tnuk-api`.
+`~/.config/thermo-review/env`, generates and persists `TNUK_JWT_SECRET` when
+missing, pushes wrangler secrets, and deploys `tnuk-api`.
 
 **Current deploy URL:** `https://tnuk-api.panos-501.workers.dev`
 
@@ -68,12 +68,15 @@ Clerk webhooks are created in the Dashboard (not via Backend API).
    - `subscriptionItem.canceled`
    - `subscriptionItem.pastDue`
    - `subscriptionItem.ended`
-   - `subscriptionItem.expired`
-4. Copy the **Signing Secret** (`whsec_…`), then:
+4. Copy the **Signing Secret** (`whsec_…`), then run the setup command and paste
+   the secret when prompted:
 
 ```bash
-npm run setup:clerk-webhook -- whsec_...
+npm run setup:clerk-webhook
 ```
+
+For non-interactive automation, provide `CLERK_WEBHOOK_SECRET` through your
+secret manager or CI environment instead of passing it as a command argument.
 
 ## 5. Dashboard env
 

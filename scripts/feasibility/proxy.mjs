@@ -12,15 +12,17 @@
 //     complete and we capture the entire endpoint set.
 //
 // Usage:
-//   node scripts/feasibility/proxy.mjs                # observe mode, :8787
+//   node scripts/feasibility/proxy.mjs                # observe mode, 127.0.0.1:8787
 //   PROXY_UPSTREAM_KEY=cursor_... node scripts/feasibility/proxy.mjs  # forward mode
 
 import http from "node:http";
 
 const PORT = Number(process.env.PROXY_PORT ?? 8787);
+const HOST = "127.0.0.1";
 const UPSTREAM = process.env.PROXY_UPSTREAM ?? "https://api2.cursor.sh";
 const UPSTREAM_KEY = process.env.PROXY_UPSTREAM_KEY;
 const seen = new Map(); // `${method} ${path}` -> count
+const REQUEST_BASE = "http://tnuk-proxy.local";
 
 function logHit(req) {
   const key = `${req.method} ${req.url}`;
@@ -40,9 +42,19 @@ function readBody(req) {
   });
 }
 
+function upstreamUrl(rawUrl) {
+  const parsed = new URL(rawUrl ?? "/", REQUEST_BASE);
+  if (parsed.origin !== REQUEST_BASE) {
+    throw new Error("absolute request URLs are not accepted");
+  }
+  const target = new URL(UPSTREAM);
+  target.pathname = parsed.pathname;
+  target.search = parsed.search;
+  return target;
+}
+
 const server = http.createServer(async (req, res) => {
   logHit(req);
-  const body = await readBody(req);
 
   if (!UPSTREAM_KEY) {
     // observe mode: don't forward, just prove we received it.
@@ -51,8 +63,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  let target;
+  try {
+    target = upstreamUrl(req.url);
+  } catch (err) {
+    res.writeHead(400, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "invalid proxy target", detail: String(err) }));
+    return;
+  }
+
+  const body = await readBody(req);
+
   // forward mode: inject the real key and reverse-proxy to the real upstream.
-  const target = new URL(req.url, UPSTREAM);
   const headers = { ...req.headers, host: target.host, authorization: `Bearer ${UPSTREAM_KEY}` };
   delete headers["content-length"];
   try {
@@ -84,8 +106,8 @@ function dumpSummary() {
 process.on("SIGINT", () => { dumpSummary(); process.exit(0); });
 process.on("SIGTERM", () => { dumpSummary(); process.exit(0); });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   process.stderr.write(
-    `[proxy] listening on http://127.0.0.1:${PORT}  mode=${UPSTREAM_KEY ? "forward→" + UPSTREAM : "observe"}\n`,
+    `[proxy] listening on http://${HOST}:${PORT}  mode=${UPSTREAM_KEY ? "forward→" + UPSTREAM : "observe"}\n`,
   );
 });

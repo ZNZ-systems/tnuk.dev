@@ -111,6 +111,7 @@ export async function runReview(
       scope,
       options,
       failClosed,
+      mapSeatErrors: credentials.mode === "seat",
     });
 
   try {
@@ -132,8 +133,9 @@ async function runReviewAgent(args: {
   scope: ReviewScope;
   options: ReviewOutputOptions;
   failClosed: boolean;
+  mapSeatErrors: boolean;
 }): Promise<{ exitCode: number; result?: ReviewResult }> {
-  const { apiKey, scope, options, failClosed } = args;
+  const { apiKey, scope, options, failClosed, mapSeatErrors } = args;
 
   let skillContent: string;
   try {
@@ -205,8 +207,10 @@ async function runReviewAgent(args: {
       result: reviewResult,
     };
   } catch (err) {
-    const seatErr = mapSeatProxyError(err);
-    if (seatErr) throw seatErr;
+    if (mapSeatErrors) {
+      const seatErr = mapSeatProxyError(err);
+      if (seatErr) throw seatErr;
+    }
     if (err instanceof CursorSdkError || err instanceof CursorAgentError) {
       process.stderr.write(
         `Error: review failed: ${err.message} (retryable=${String(err.isRetryable)})\n`,

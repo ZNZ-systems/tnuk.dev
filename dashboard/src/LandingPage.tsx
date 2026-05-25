@@ -215,7 +215,7 @@ export function LandingPage() {
       .map((id) => document.getElementById(id))
       .filter((el): el is HTMLElement => el !== null);
 
-    if (sections.length === 0) return;
+    if (sections.length === 0 || typeof IntersectionObserver === "undefined") return;
 
     const observer = new IntersectionObserver(
       (entries) => {

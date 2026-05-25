@@ -7,11 +7,14 @@
  *        (or https://tnuk-api.panos-501.workers.dev/webhooks/clerk until DNS is live)
  *   Events: subscription.created, subscription.updated, subscription.active,
  *           subscription.pastDue, subscriptionItem.canceled, subscriptionItem.pastDue,
- *           subscriptionItem.ended, subscriptionItem.expired
+ *           subscriptionItem.ended
  *
  * Usage:
- *   node scripts/setup-clerk-webhook.mjs whsec_...
- *   node scripts/setup-clerk-webhook.mjs   # prompts if secret omitted
+ *   node scripts/setup-clerk-webhook.mjs   # prompts for the secret
+ *   # Or set CLERK_WEBHOOK_SECRET through CI/secret-manager environment.
+ *
+ * To avoid leaking secrets through shell history or process listings, this
+ * script never accepts the signing secret as a command-line argument.
  */
 
 import { spawnSync } from "node:child_process";
@@ -28,15 +31,24 @@ const WEBHOOK_EVENTS = [
   "subscriptionItem.canceled",
   "subscriptionItem.pastDue",
   "subscriptionItem.ended",
-  "subscriptionItem.expired",
 ];
 
 async function main() {
-  let secret = process.argv[2]?.trim();
+  if (process.argv.length > 2) {
+    throw new Error("Do not pass the webhook secret as an argument; run the script and paste it at the prompt.");
+  }
+
+  let secret = process.env.CLERK_WEBHOOK_SECRET?.trim();
   if (!secret) {
+    if (!process.stdin.isTTY) {
+      throw new Error("Missing CLERK_WEBHOOK_SECRET. Set it in the environment or run interactively.");
+    }
     const rl = createInterface({ input: process.stdin, output: process.stderr });
-    secret = (await rl.question("Paste Clerk webhook signing secret (whsec_…): ")).trim();
-    rl.close();
+    try {
+      secret = (await rl.question("Paste Clerk webhook signing secret (whsec_…): ")).trim();
+    } finally {
+      rl.close();
+    }
   }
 
   if (!secret.startsWith("whsec_")) {
