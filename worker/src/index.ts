@@ -72,6 +72,9 @@ app.post("/auth/device/approve", async (c) => {
 
   const found = await getDeviceByUserCode(c.env, userCode);
   if (!found) return c.json({ error: "unknown or expired code" }, 404);
+  if (found.state.status !== "pending") {
+    return c.json({ error: "code already used or expired" }, 409);
+  }
 
   const account = typeof claims.email === "string" ? claims.email : userId;
   const { token, expiresAt } = await mintSeatToken(

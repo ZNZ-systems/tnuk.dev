@@ -14,6 +14,22 @@ function logProgress(message: string): void {
   process.stderr.write(`[thermo-review] ${message}\n`);
 }
 
+/** Temporarily point the SDK at the tnuk Worker proxy; restores env on exit. */
+async function withSeatBackend<T>(baseUrl: string, fn: () => Promise<T>): Promise<T> {
+  const prevBase = process.env["CURSOR_API_BASE_URL"];
+  const prevBackend = process.env["CURSOR_BACKEND_URL"];
+  process.env["CURSOR_API_BASE_URL"] = baseUrl;
+  process.env["CURSOR_BACKEND_URL"] = baseUrl;
+  try {
+    return await fn();
+  } finally {
+    if (prevBase === undefined) delete process.env["CURSOR_API_BASE_URL"];
+    else process.env["CURSOR_API_BASE_URL"] = prevBase;
+    if (prevBackend === undefined) delete process.env["CURSOR_BACKEND_URL"];
+    else process.env["CURSOR_BACKEND_URL"] = prevBackend;
+  }
+}
+
 async function streamReviewText(stream: AsyncGenerator<SDKMessage, void>): Promise<string> {
   const chunks: string[] = [];
 
@@ -60,16 +76,31 @@ export async function runReview(
     return { exitCode: 1 };
   }
 
+  const failClosed = options.failClosed ?? true;
+  const run = () =>
+    runReviewAgent({
+      apiKey: credentials.apiKey,
+      seatMode: credentials.mode === "seat",
+      scope,
+      options,
+      failClosed,
+    });
+
   if (credentials.mode === "seat") {
-    // Route the SDK through the tnuk Worker. The worker validates the seat and
-    // injects the managed Cursor key server-side; the tnuk token is the API key.
-    process.env["CURSOR_API_BASE_URL"] = TNUK_API_BASE_URL;
-    process.env["CURSOR_BACKEND_URL"] = TNUK_API_BASE_URL;
-  } else {
-    delete process.env["CURSOR_API_BASE_URL"];
-    delete process.env["CURSOR_BACKEND_URL"];
+    return withSeatBackend(TNUK_API_BASE_URL, run);
   }
-  const apiKey = credentials.apiKey;
+
+  return run();
+}
+
+async function runReviewAgent(args: {
+  apiKey: string;
+  seatMode: boolean;
+  scope: ReviewScope;
+  options: ReviewOutputOptions;
+  failClosed: boolean;
+}): Promise<{ exitCode: number; result?: ReviewResult }> {
+  const { apiKey, seatMode, scope, options, failClosed } = args;
 
   let skillContent: string;
   try {
@@ -81,8 +112,6 @@ export async function runReview(
   }
 
   const prompt = buildReviewPrompt(skillContent, scope);
-  const failClosed = options.failClosed ?? true;
-
   logProgress(`Reviewing ${scope.description}`);
 
   try {
@@ -147,7 +176,7 @@ export async function runReview(
       const status = (err as CursorSdkError).status;
       // The tnuk Worker returns 401 (bad/expired token), 402 (no active seat),
       // or 403 (org subscription inactive) when access is denied.
-      if (credentials.mode === "seat" && (status === 401 || status === 402 || status === 403)) {
+      if (seatMode && (status === 401 || status === 402 || status === 403)) {
         process.stderr.write(
           "Error: your tnuk seat is not active.\n" +
             "  - Run `tnuk login` to re-authenticate, or\n" +
