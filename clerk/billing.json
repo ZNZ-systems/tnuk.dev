@@ -1,0 +1,10 @@
+{
+  "billing": {
+    "features": {},
+    "free_trial_requires_payment_method": true,
+    "organization_enabled": false,
+    "plans": {},
+    "user_enabled": false
+  },
+  "config_version": "v1_615b6f31"
+}

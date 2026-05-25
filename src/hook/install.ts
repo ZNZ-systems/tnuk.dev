@@ -14,16 +14,35 @@ function bundledPrePushContent(): string {
     return readFileSync(TEMPLATE_HOOK, "utf8");
   }
   return `#!/bin/sh
-command -v thermo-review >/dev/null 2>&1 || exit 0
+command -v tnuk >/dev/null 2>&1 || exit 0
+[ -n "$TNUK_SKIP" ] && exit 0
 [ -n "$THERMO_REVIEW_SKIP" ] && exit 0
-exec thermo-review hook run
+exec tnuk hook run
 `;
 }
 
+function readGlobalGitConfig(key: string): string | undefined {
+  try {
+    return execFileSync("git", ["config", "--global", "--get", key], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+function setGlobalGitConfigIfAllowed(key: string, value: string, current: string | undefined): boolean {
+  if (current !== undefined && current !== value) {
+    return false;
+  }
+  execFileSync("git", ["config", "--global", key, value], { encoding: "utf8" });
+  return true;
+}
+
 /**
- * Installs user-level git template pre-push hook.
+ * Installs user-level git template pre-push hook and configures git globally.
  */
-export function installHook(globalHooksPath: boolean): void {
+export function installHook(): void {
   mkdirSync(GIT_TEMPLATE_HOOKS_DIR, { recursive: true });
 
   const hookPath = join(GIT_TEMPLATE_HOOKS_DIR, "pre-push");
@@ -31,28 +50,28 @@ export function installHook(globalHooksPath: boolean): void {
   writeFileSync(hookPath, content, { encoding: "utf8", mode: 0o755 });
   chmodSync(hookPath, 0o755);
 
-  execFileSync("git", ["config", "--global", "init.templateDir", GIT_TEMPLATE_DIR], {
-    encoding: "utf8",
-  });
+  process.stdout.write(`Installed pre-push hook: ${hookPath}\n`);
 
-  if (globalHooksPath) {
-    execFileSync("git", ["config", "--global", "core.hooksPath", GIT_TEMPLATE_HOOKS_DIR], {
-      encoding: "utf8",
-    });
+  const templateDir = readGlobalGitConfig("init.templateDir");
+  if (setGlobalGitConfigIfAllowed("init.templateDir", GIT_TEMPLATE_DIR, templateDir)) {
+    process.stdout.write(`Set git init.templateDir = ${GIT_TEMPLATE_DIR}\n`);
+  } else {
+    process.stdout.write(
+      `Skipped init.templateDir (already set to ${templateDir}). Run tnuk hook install after adjusting git config if needed.\n`,
+    );
   }
 
-  process.stdout.write(`Installed pre-push hook: ${hookPath}\n`);
-  process.stdout.write(`Set git init.templateDir = ${GIT_TEMPLATE_DIR}\n`);
-  if (globalHooksPath) {
+  const hooksPath = readGlobalGitConfig("core.hooksPath");
+  if (setGlobalGitConfigIfAllowed("core.hooksPath", GIT_TEMPLATE_HOOKS_DIR, hooksPath)) {
+    process.stdout.write(`Set git core.hooksPath = ${GIT_TEMPLATE_HOOKS_DIR}\n`);
     process.stdout.write(
-      `Set git core.hooksPath = ${GIT_TEMPLATE_HOOKS_DIR}\n` +
-        "Note: this applies template hooks to all repos on this machine.\n" +
+      "Note: this applies template hooks to all repos on this machine.\n" +
         "Existing repo-specific hooks in .git/hooks/ are bypassed unless chained.\n",
     );
   } else {
     process.stdout.write(
-      "New repos will inherit the hook via init.templateDir.\n" +
-        "For existing repos, run: thermo-review hook install --global-hooks-path\n",
+      `Skipped core.hooksPath (already set to ${hooksPath}). ` +
+        "New repos still inherit the hook via init.templateDir when configured.\n",
     );
   }
 }
@@ -64,7 +83,7 @@ export function uninstallHook(): void {
   const hookPath = join(GIT_TEMPLATE_HOOKS_DIR, "pre-push");
   if (existsSync(hookPath)) {
     const content = readFileSync(hookPath, "utf8");
-    if (content.includes("thermo-review")) {
+    if (content.includes("tnuk") || content.includes("thermo-review")) {
       unlinkSync(hookPath);
       process.stdout.write(`Removed ${hookPath}\n`);
     }

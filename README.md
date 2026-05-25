@@ -56,13 +56,21 @@ Install the plugin in Cursor if you have not already:
 3. Confirm the skill exists at:
    `~/.cursor/plugins/cache/cursor-public/cursor-team-kit/.../thermo-nuclear-code-quality-review/SKILL.md`
 
-### 2. Install thermo-review
+### 2. Install tnuk
 
-**From source (recommended today):**
+**From npm (recommended):**
 
 ```bash
-git clone https://github.com/pzep1/thermo-review-cli.git
-cd thermo-review-cli
+npm install -g tnuk.dev
+```
+
+This installs both `tnuk` and `thermo-review` on your PATH, and configures the pre-push git hook automatically.
+
+**From source:**
+
+```bash
+git clone https://github.com/ZNZ-systems/tnuk.dev.git
+cd tnuk.dev
 npm install
 npm run build
 npm link
@@ -122,33 +130,34 @@ source ~/.config/thermo-review/env
 echo "${CURSOR_API_KEY:0:12}..."   # should print cursor_... prefix only
 ```
 
-### 4. Install the pre-push hook
+### 4. Pre-push hook
 
-Choose based on whether you want this on **new repos only** or **all repos**.
+The hook is installed automatically during `npm install`. It writes `~/.git-templates/hooks/pre-push` and sets:
 
-#### New repos only
-
-```bash
-thermo-review hook install
-```
-
-Sets `git config --global init.templateDir ~/.git-templates`. Repos you `git init` after this inherit the hook.
-
-#### All repos on this machine (most common)
-
-```bash
-thermo-review hook install --global-hooks-path
-```
-
-This also sets `git config --global core.hooksPath ~/.git-templates/hooks`, so **existing clones** use the hook too.
+- `git config --global init.templateDir ~/.git-templates` (new repos)
+- `git config --global core.hooksPath ~/.git-templates/hooks` (existing repos)
 
 Confirm installation:
 
 ```bash
 ls -la ~/.git-templates/hooks/pre-push
 git config --global --get init.templateDir
-git config --global --get core.hooksPath   # if you used --global-hooks-path
+git config --global --get core.hooksPath
 ```
+
+To reinstall manually:
+
+```bash
+thermo-review hook install
+```
+
+To skip automatic hook setup (CI or custom git config):
+
+```bash
+TNUK_SKIP_HOOK_INSTALL=1 npm install -g tnuk.dev
+```
+
+Git config is only changed when unset or already pointing at tnuk's template directory, so existing custom `core.hooksPath` values are left alone.
 
 #### If you already have a custom pre-push hook
 
