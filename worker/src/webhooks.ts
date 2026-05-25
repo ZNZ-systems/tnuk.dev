@@ -1,7 +1,7 @@
 import { Webhook } from "svix";
 
 import type { Env } from "./env.js";
-import { getOrgSubscription, putOrgSubscription } from "./seats.js";
+import { getOrgSubscription, putOrgSubscription } from "./subscriptions.js";
 
 // Clerk billing payloads are nested: the payer is under data.payer, the plan
 // under data.items[i].plan.slug, the subscription id is data.id.

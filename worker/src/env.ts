@@ -1,5 +1,6 @@
 export interface Env {
   TNUK_KV: KVNamespace;
+  DEVICE_HANDOFF: DurableObjectNamespace;
 
   // vars
   DASHBOARD_URL: string;

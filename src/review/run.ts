@@ -14,6 +14,34 @@ function logProgress(message: string): void {
   process.stderr.write(`[thermo-review] ${message}\n`);
 }
 
+class SeatProxyError extends Error {
+  readonly exitCode = 1;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "SeatProxyError";
+  }
+}
+
+function writeSeatInactiveError(): void {
+  process.stderr.write(
+    "Error: your tnuk seat is not active.\n" +
+      "  - Run `tnuk login` to re-authenticate, or\n" +
+      "  - Ask your org admin to assign you a seat at https://tnuk.dev\n",
+  );
+}
+
+function mapSeatProxyError(err: unknown): SeatProxyError | null {
+  if (!(err instanceof CursorSdkError || err instanceof CursorAgentError)) {
+    return null;
+  }
+  const status = (err as CursorSdkError).status;
+  if (status !== 401 && status !== 402 && status !== 403) {
+    return null;
+  }
+  return new SeatProxyError(err.message);
+}
+
 /** Temporarily point the SDK at the tnuk Worker proxy; restores env on exit. */
 async function withSeatBackend<T>(baseUrl: string, fn: () => Promise<T>): Promise<T> {
   const prevBase = process.env["CURSOR_API_BASE_URL"];
@@ -22,6 +50,10 @@ async function withSeatBackend<T>(baseUrl: string, fn: () => Promise<T>): Promis
   process.env["CURSOR_BACKEND_URL"] = baseUrl;
   try {
     return await fn();
+  } catch (err) {
+    const seatErr = mapSeatProxyError(err);
+    if (seatErr) throw seatErr;
+    throw err;
   } finally {
     if (prevBase === undefined) delete process.env["CURSOR_API_BASE_URL"];
     else process.env["CURSOR_API_BASE_URL"] = prevBase;
@@ -80,27 +112,32 @@ export async function runReview(
   const run = () =>
     runReviewAgent({
       apiKey: credentials.apiKey,
-      seatMode: credentials.mode === "seat",
       scope,
       options,
       failClosed,
     });
 
-  if (credentials.mode === "seat") {
-    return withSeatBackend(TNUK_API_BASE_URL, run);
+  try {
+    if (credentials.mode === "seat") {
+      return await withSeatBackend(TNUK_API_BASE_URL, run);
+    }
+    return await run();
+  } catch (err) {
+    if (err instanceof SeatProxyError) {
+      writeSeatInactiveError();
+      return { exitCode: err.exitCode };
+    }
+    throw err;
   }
-
-  return run();
 }
 
 async function runReviewAgent(args: {
   apiKey: string;
-  seatMode: boolean;
   scope: ReviewScope;
   options: ReviewOutputOptions;
   failClosed: boolean;
 }): Promise<{ exitCode: number; result?: ReviewResult }> {
-  const { apiKey, seatMode, scope, options, failClosed } = args;
+  const { apiKey, scope, options, failClosed } = args;
 
   let skillContent: string;
   try {
@@ -173,17 +210,6 @@ async function runReviewAgent(args: {
     };
   } catch (err) {
     if (err instanceof CursorSdkError || err instanceof CursorAgentError) {
-      const status = (err as CursorSdkError).status;
-      // The tnuk Worker returns 401 (bad/expired token), 402 (no active seat),
-      // or 403 (org subscription inactive) when access is denied.
-      if (seatMode && (status === 401 || status === 402 || status === 403)) {
-        process.stderr.write(
-          "Error: your tnuk seat is not active.\n" +
-            "  - Run `tnuk login` to re-authenticate, or\n" +
-            "  - Ask your org admin to assign you a seat at https://tnuk.dev\n",
-        );
-        return { exitCode: 1 };
-      }
       process.stderr.write(
         `Error: review failed: ${err.message} (retryable=${String(err.isRetryable)})\n`,
       );

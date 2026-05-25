@@ -21,6 +21,14 @@ binding = "TNUK_KV"
 id = "c6cd46342fe941f38604a830588193a8"
 preview_id = "14079e252db2433ba05eef84a97c6958"
 
+[[durable_objects.bindings]]
+name = "DEVICE_HANDOFF"
+class_name = "DeviceHandoff"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["DeviceHandoff"]
+
 # Custom domain — DNS is a CNAME at Vercel; Cloudflare registers the hostname on deploy.
 [[routes]]
 pattern = "api.tnuk.dev"

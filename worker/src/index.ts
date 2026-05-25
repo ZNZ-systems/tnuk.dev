@@ -6,12 +6,11 @@ import type { Env } from "./env.js";
 import { bearer, mintSeatToken } from "./jwt.js";
 import { requireActiveSeat } from "./seat-gate.js";
 import {
-  consumeAuthorizedDevice,
   createDevice,
   getDeviceByUserCode,
-  orgHasActiveSeat,
   setDevice,
-} from "./seats.js";
+} from "./devices.js";
+import { orgHasActiveSeat } from "./subscriptions.js";
 import { handleClerkWebhook } from "./webhooks.js";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -97,8 +96,12 @@ app.post("/auth/device/poll", async (c) => {
   const deviceCode = body.deviceCode;
   if (!deviceCode) return c.json({ error: "missing deviceCode" }, 400);
 
-  const result = await consumeAuthorizedDevice(c.env, deviceCode);
-  return c.json(result);
+  const stub = c.env.DEVICE_HANDOFF.get(c.env.DEVICE_HANDOFF.idFromName(deviceCode));
+  return stub.fetch("http://device-handoff/consume", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ deviceCode }),
+  });
 });
 
 app.get("/auth/whoami", async (c) => {
@@ -144,3 +147,4 @@ app.all("*", async (c) => {
 });
 
 export default app;
+export { DeviceHandoff } from "./device-handoff.js";

@@ -1,6 +1,6 @@
 import type { Env } from "./env.js";
 import { bearer, verifySeatToken, type SeatClaims } from "./jwt.js";
-import { orgHasActiveSeat } from "./seats.js";
+import { orgHasActiveSeat } from "./subscriptions.js";
 
 export type SeatGateFailure = { ok: false; status: 401 | 402; error: string };
 export type SeatGateSuccess = { ok: true; seat: SeatClaims };
