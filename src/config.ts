@@ -48,6 +48,9 @@ export function loadAuth(): StoredAuth | undefined {
   try {
     const parsed = JSON.parse(readFileSync(AUTH_FILE, "utf8")) as StoredAuth;
     if (parsed && typeof parsed.token === "string" && parsed.token.length > 0) {
+      if (parsed.expiresAt !== undefined && Date.now() >= parsed.expiresAt) {
+        return undefined;
+      }
       return parsed;
     }
   } catch {
@@ -89,17 +92,17 @@ export function loadCursorApiKey(): string | undefined {
 }
 
 /**
- * Resolves review credentials: tnuk seat token first, then direct CURSOR_API_KEY.
+ * Resolves review credentials: direct CURSOR_API_KEY first, then tnuk seat token.
  */
 export function loadReviewCredentials(): ReviewCredentials | undefined {
-  const seat = loadAuth();
-  if (seat) {
-    return { mode: "seat", apiKey: seat.token };
-  }
-
   const direct = loadCursorApiKey();
   if (direct) {
     return { mode: "direct", apiKey: direct };
+  }
+
+  const seat = loadAuth();
+  if (seat) {
+    return { mode: "seat", apiKey: seat.token };
   }
 
   return undefined;

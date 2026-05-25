@@ -53,16 +53,21 @@ export async function handleClerkWebhook(req: Request, env: Env): Promise<Respon
       break;
     }
     case "subscription.pastDue":
+    case "subscription.canceled":
+    case "subscription.ended":
+    case "subscription.expired": {
+      await markStatus(env, orgId, evt.data.status ?? "canceled", now);
+      break;
+    }
     case "subscriptionItem.pastDue": {
       await markStatus(env, orgId, "past_due", now);
       break;
     }
+    // Per-seat item teardown must not cancel org-wide access; org status comes from subscription.* only.
     case "subscriptionItem.canceled":
     case "subscriptionItem.ended":
-    case "subscriptionItem.expired": {
-      await markStatus(env, orgId, "canceled", now);
+    case "subscriptionItem.expired":
       break;
-    }
     default:
       break;
   }
