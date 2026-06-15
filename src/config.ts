@@ -13,6 +13,8 @@ export const GIT_TEMPLATE_HOOKS_DIR = join(GIT_TEMPLATE_DIR, "hooks");
 
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
 
+export type OpenAIAuthMode = "api" | "chatgpt";
+
 // Skill bundled with the package (dist/config.js -> ../templates/...).
 const BUNDLED_SKILL = fileURLToPath(
   new URL("../templates/skills/thermo-nuclear/SKILL.md", import.meta.url),
@@ -33,6 +35,7 @@ interface ThermoConfig {
   provider?: ProviderId;
   skillPath?: string;
   openaiModel?: string;
+  openaiAuth?: OpenAIAuthMode;
 }
 
 let configCache: ThermoConfig | undefined;
@@ -64,6 +67,10 @@ function readConfigFile(): ThermoConfig {
   if (typeof openaiModel === "string") {
     config.openaiModel = openaiModel;
   }
+  const openaiAuth = obj["openaiAuth"];
+  if (openaiAuth === "api" || openaiAuth === "chatgpt") {
+    config.openaiAuth = openaiAuth;
+  }
   return config;
 }
 
@@ -74,32 +81,44 @@ function loadConfigFile(): ThermoConfig {
   return configCache;
 }
 
-/**
- * Loads CURSOR_API_KEY from env or ~/.config/thermo-review/env (Cursor provider only).
- */
-export function loadApiKey(): string | undefined {
-  const fromEnv = process.env["CURSOR_API_KEY"]?.trim();
-  if (fromEnv) {
-    return fromEnv;
+function unquoteEnvValue(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function loadEnvVar(names: readonly string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) {
+      return value;
+    }
   }
 
   if (!existsSync(ENV_FILE)) {
     return undefined;
   }
 
+  const wanted = new Set(names);
   const lines = readFileSync(ENV_FILE, "utf8").split("\n");
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) {
       continue;
     }
-    const match = /^export\s+CURSOR_API_KEY=(.+)$/.exec(trimmed);
-    if (match?.[1]) {
-      return match[1].replace(/^["']|["']$/g, "");
-    }
-    const plain = /^CURSOR_API_KEY=(.+)$/.exec(trimmed);
-    if (plain?.[1]) {
-      return plain[1].replace(/^["']|["']$/g, "");
+    const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(trimmed);
+    const name = match?.[1];
+    const value = match?.[2];
+    if (name && value !== undefined && wanted.has(name)) {
+      const unquoted = unquoteEnvValue(value);
+      if (unquoted) {
+        return unquoted;
+      }
     }
   }
 
@@ -107,8 +126,29 @@ export function loadApiKey(): string | undefined {
 }
 
 /**
+ * Loads CURSOR_API_KEY from env or ~/.config/thermo-review/env (Cursor provider only).
+ */
+export function loadApiKey(): string | undefined {
+  return loadEnvVar(["CURSOR_API_KEY"]);
+}
+
+/** Loads the official OpenAI API key for the stable OpenAI provider mode. */
+export function loadOpenAIApiKey(): string | undefined {
+  return loadEnvVar(["THERMO_REVIEW_OPENAI_API_KEY", "OPENAI_API_KEY"]);
+}
+
+/** Selects official OpenAI API auth by default; ChatGPT OAuth is explicit opt-in. */
+export function loadOpenAIAuthMode(): OpenAIAuthMode {
+  const fromEnv = loadEnvVar(["THERMO_REVIEW_OPENAI_AUTH"]);
+  if (fromEnv === "api" || fromEnv === "chatgpt") {
+    return fromEnv;
+  }
+  return loadConfigFile().openaiAuth ?? "api";
+}
+
+/**
  * Selects the review backend: explicit flag > THERMO_REVIEW_PROVIDER env >
- * config file > default ("cursor").
+ * config file > default ("openai").
  */
 export function loadProvider(explicit?: ProviderId): ProviderId {
   if (explicit) {
@@ -190,11 +230,6 @@ export function openaiModel(): string {
     return fromConfig;
   }
   return DEFAULT_OPENAI_MODEL;
-}
-
-/** Codex-shaped User-Agent so the ChatGPT backend accepts the request. */
-export function codexUserAgent(): string {
-  return `codex_cli_rs/0.0.0 (${process.platform}; ${process.arch})`;
 }
 
 /** Wall-clock ceiling for an OpenAI review run, so a stalled stream can't hang. */

@@ -19,6 +19,15 @@ export interface BackendRunOutput {
   agentId: string | undefined;
 }
 
+export interface BackendCapabilities {
+  /** Must be true for the thermo pre-push gate; diff-only summarizers fail closed. */
+  readonly canInspectRepository: boolean;
+  /** Human-readable inspection mechanism used in progress/docs. */
+  readonly inspection: "local-agent" | "sandboxed-tools" | "diff-only";
+  /** Tool names or built-in access path available to the model. */
+  readonly tools: readonly string[];
+}
+
 /**
  * Recoverable backend failure. run.ts maps "config" -> exit 1 and "agent" -> exit 2.
  * Anything else thrown by a backend bubbles up as an unexpected crash.
@@ -41,6 +50,7 @@ export class BackendError extends Error {
  */
 export interface ReviewBackend {
   readonly id: ProviderId;
+  readonly capabilities: BackendCapabilities;
   /** Cheap precondition (key present / logged in). Throws BackendError("config") if not ready. */
   preflight(): Promise<void>;
   run(input: BackendRunInput): Promise<BackendRunOutput>;

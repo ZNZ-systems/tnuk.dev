@@ -179,7 +179,7 @@ export function scopeForPrePush(
 }
 
 // Lock/generated files that bloat a diff without being worth reviewing.
-const DIFF_EXCLUDES = [
+export const REVIEW_DIFF_EXCLUDES = [
   ":(exclude)package-lock.json",
   ":(exclude)pnpm-lock.yaml",
   ":(exclude)yarn.lock",
@@ -189,7 +189,11 @@ const DIFF_EXCLUDES = [
   ":(exclude)*.min.js",
   ":(exclude)*.map",
   ":(exclude)*.snap",
-];
+] as const;
+
+export function reviewDiffPathspec(): string[] {
+  return [".", ...REVIEW_DIFF_EXCLUDES];
+}
 
 export interface ScopeDiff {
   stat: string;
@@ -200,27 +204,28 @@ export interface ScopeDiff {
 
 /**
  * Collects the review diff (stat + patch + log) with lock/generated files
- * excluded and the patch capped, so a backend can inject it directly instead of
- * making the agent reconstruct it tool-call by tool-call.
+ * excluded. This helper is intentionally fail-closed: callers that inline a diff
+ * must not silently review a prefix of a larger change.
  */
 export function collectScopeDiff(scope: ReviewScope, maxPatchChars = 120_000): ScopeDiff {
   const range = `${scope.fromSha}..${scope.toSha}`;
-  const pathspec = [".", ...DIFF_EXCLUDES];
+  const pathspec = reviewDiffPathspec();
   const stat = gitTry(scope.repoRoot, ["diff", "--stat", range, "--", ...pathspec]) ?? "";
   const log = gitTry(scope.repoRoot, ["log", "--oneline", range]) ?? "";
-  let patch = gitTry(scope.repoRoot, ["diff", range, "--", ...pathspec]) ?? "";
-  let truncated = false;
+  const patch = gitTry(scope.repoRoot, ["diff", range, "--", ...pathspec]) ?? "";
   if (patch.length > maxPatchChars) {
-    patch = patch.slice(0, maxPatchChars);
-    truncated = true;
+    throw new Error(
+      `Review diff is ${patch.length} chars, exceeding the inline limit of ${maxPatchChars}. ` +
+        "Use a tool-capable backend or narrow the review scope; refusing to review a truncated diff.",
+    );
   }
-  return { stat, patch, log, truncated };
+  return { stat, patch, log, truncated: false };
 }
 
 /**
- * Returns true if there are file changes in the review range. Used to skip the
- * agent entirely when there is nothing to review (e.g. pushing the base branch
- * with no new commits), which otherwise leaves the agent looping with no diff.
+ * Returns true if there are reviewable file changes in the review range (using
+ * the same lock/generated exclusions as diff collection). Used to skip the agent
+ * entirely when there is nothing to review, which otherwise leaves it looping.
  */
 export function scopeHasChanges(scope: ReviewScope): boolean {
   if (scope.fromSha === scope.toSha) {
@@ -229,7 +234,13 @@ export function scopeHasChanges(scope: ReviewScope): boolean {
   try {
     // `git diff --quiet` exits 0 when there are no changes; execFileSync throws
     // on the non-zero exit that signals changes (or any error → treat as changes).
-    git(scope.repoRoot, ["diff", "--quiet", `${scope.fromSha}..${scope.toSha}`]);
+    git(scope.repoRoot, [
+      "diff",
+      "--quiet",
+      `${scope.fromSha}..${scope.toSha}`,
+      "--",
+      ...reviewDiffPathspec(),
+    ]);
     return false;
   } catch {
     return true;

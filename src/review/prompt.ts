@@ -1,13 +1,20 @@
+import { reviewDiffPathspec } from "../git/push-scope.js";
 import type { ReviewScope } from "../types.js";
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
 
 /**
  * Builds the agent prompt with inlined skill content and machine-parseable verdict header.
  */
 export function buildReviewPrompt(skillContent: string, scope: ReviewScope): string {
+  const range = `${scope.fromSha}..${scope.toSha}`;
+  const pathspec = reviewDiffPathspec().map(shellQuote).join(" ");
   const diffCommands = [
-    `git diff ${scope.fromSha}..${scope.toSha} --stat`,
-    `git diff ${scope.fromSha}..${scope.toSha}`,
-    `git log --oneline ${scope.fromSha}..${scope.toSha}`,
+    `git diff --stat ${range} -- ${pathspec}`,
+    `git diff ${range} -- ${pathspec}`,
+    `git log --oneline ${range}`,
   ].join("\n");
 
   return `# Thermo-Nuclear Code Quality Review (pre-push gate)
@@ -22,10 +29,11 @@ You are running as an automated pre-push quality gate. Review ONLY the changes i
 - Description: ${scope.description}
 
 ## Your task
-1. Run shell commands to inspect the diff in scope. Start with:
+1. Inspect the diff in scope. When shell is available, start with:
 \`\`\`
 ${diffCommands}
 \`\`\`
+   When only sandboxed review tools are available, use the equivalent git/file tools. Lock/generated pathspecs are excluded from review by the gate.
 2. Read changed files as needed for a deep maintainability review.
 3. Apply the thermo-nuclear review skill below strictly.
 4. Use the skill's Approval Bar: if ANY presumptive blocker applies, verdict is BLOCK.

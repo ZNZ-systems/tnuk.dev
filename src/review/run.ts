@@ -43,7 +43,7 @@ function emitVerdict(
 /**
  * Runs the thermo-nuclear review. Owns skill loading, prompt building, verdict
  * parsing, output formatting, and exit codes; delegates the actual agent run to
- * the selected backend (Cursor SDK or OpenAI Agents SDK).
+ * the selected backend (Cursor SDK or OpenAI Responses tool loop).
  */
 export async function runReview(
   scope: ReviewScope,
@@ -66,6 +66,12 @@ export async function runReview(
   }
 
   const backend = await resolveBackend(options.provider);
+  if (!backend.capabilities.canInspectRepository) {
+    process.stderr.write(
+      `Error: provider "${backend.id}" cannot inspect the repository; refusing to run a diff-only review gate.\n`,
+    );
+    return { exitCode: 2 };
+  }
 
   try {
     await backend.preflight();
@@ -88,7 +94,9 @@ export async function runReview(
 
   const prompt = buildReviewPrompt(skillContent, scope);
 
-  logProgress(`Reviewing ${scope.description} via ${backend.id}`);
+  logProgress(
+    `Reviewing ${scope.description} via ${backend.id} (${backend.capabilities.inspection})`,
+  );
 
   let out: BackendRunOutput;
   try {

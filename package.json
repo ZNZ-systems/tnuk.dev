@@ -1,7 +1,7 @@
 {
   "name": "thermo-review-cli",
   "version": "0.1.0",
-  "description": "Pre-push thermo-nuclear code quality review via the Cursor SDK or the OpenAI Responses API (Sign in with ChatGPT)",
+  "description": "Pre-push thermo-nuclear code quality review via the Cursor SDK or OpenAI Responses API tools",
   "type": "module",
   "license": "MIT",
   "author": "Panos Zepos",
@@ -19,6 +19,7 @@
     "openai",
     "responses-api",
     "chatgpt",
+    "function-calling",
     "git-hooks",
     "pre-push",
     "code-review",

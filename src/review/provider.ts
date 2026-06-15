@@ -3,10 +3,9 @@ import type { ProviderId, ReviewBackend } from "./backend.js";
 
 /**
  * Resolves the review backend, honoring (in order) an explicit CLI flag, the
- * THERMO_REVIEW_PROVIDER env var, the config file, then defaulting to Cursor.
+ * THERMO_REVIEW_PROVIDER env var, the config file, then defaulting to OpenAI.
  *
- * Backends are imported lazily so the Cursor/hook path never loads the heavy
- * `@openai/agents` tree (and vice versa).
+ * Backends are imported lazily so each provider only loads its own SDK/client.
  */
 export async function resolveBackend(explicit?: ProviderId): Promise<ReviewBackend> {
   const provider = loadProvider(explicit);

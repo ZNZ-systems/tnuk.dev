@@ -54,6 +54,11 @@ async function streamReviewText(
  */
 export class CursorBackend implements ReviewBackend {
   readonly id = "cursor" as const;
+  readonly capabilities = {
+    canInspectRepository: true,
+    inspection: "local-agent",
+    tools: ["shell", "read_file", "list_files"],
+  } as const;
 
   preflight(): Promise<void> {
     if (!loadApiKey()) {

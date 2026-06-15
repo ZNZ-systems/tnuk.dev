@@ -46,6 +46,59 @@ export interface SaveAccount {
   planType?: string;
 }
 
+function asObject(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/** Runtime validation for token endpoint responses before storing credentials. */
+export function validateTokenResponse(
+  value: unknown,
+  opts: { requireIdToken?: boolean } = {},
+): TokenResponse {
+  const obj = asObject(value);
+  if (!nonEmptyString(obj["access_token"])) {
+    throw new Error("Token response missing access_token.");
+  }
+  const tokenType = obj["token_type"];
+  if (tokenType !== undefined && (!nonEmptyString(tokenType) || !/^bearer$/i.test(tokenType))) {
+    throw new Error("Token response has unsupported token_type.");
+  }
+  const idToken = obj["id_token"];
+  if (opts.requireIdToken && !nonEmptyString(idToken)) {
+    throw new Error("Token response missing id_token.");
+  }
+  if (idToken !== undefined && !nonEmptyString(idToken)) {
+    throw new Error("Token response has malformed id_token.");
+  }
+  const refreshToken = obj["refresh_token"];
+  if (refreshToken !== undefined && !nonEmptyString(refreshToken)) {
+    throw new Error("Token response has malformed refresh_token.");
+  }
+  const expiresIn = obj["expires_in"];
+  if (expiresIn !== undefined && (typeof expiresIn !== "number" || !Number.isFinite(expiresIn) || expiresIn <= 0)) {
+    throw new Error("Token response has malformed expires_in.");
+  }
+
+  const resp: TokenResponse = { access_token: obj["access_token"] };
+  if (nonEmptyString(idToken)) {
+    resp.id_token = idToken;
+  }
+  if (nonEmptyString(refreshToken)) {
+    resp.refresh_token = refreshToken;
+  }
+  if (typeof expiresIn === "number") {
+    resp.expires_in = expiresIn;
+  }
+  if (nonEmptyString(tokenType)) {
+    resp.token_type = tokenType;
+  }
+  return resp;
+}
+
 function computeExpiresAt(resp: TokenResponse): number {
   const fromJwt = jwtExpEpochMs(resp.access_token);
   if (fromJwt) {
@@ -73,10 +126,11 @@ function isValidAuth(value: unknown): value is StoredOpenAIAuth {
   }
   const t = tokens as Record<string, unknown>;
   return (
-    typeof t["access_token"] === "string" &&
-    typeof t["account_id"] === "string" &&
-    typeof t["id_token"] === "string" &&
-    typeof obj["expires_at"] === "number"
+    nonEmptyString(t["access_token"]) &&
+    nonEmptyString(t["account_id"]) &&
+    nonEmptyString(t["id_token"]) &&
+    typeof obj["expires_at"] === "number" &&
+    Number.isFinite(obj["expires_at"])
   );
 }
 
@@ -101,12 +155,14 @@ async function loadAuth(): Promise<StoredOpenAIAuth> {
 
 /** Persists tokens from the initial authorization_code exchange. */
 export async function saveFromExchange(resp: TokenResponse, account: SaveAccount): Promise<void> {
-  if (!resp.id_token) {
+  resp = validateTokenResponse(resp, { requireIdToken: true });
+  const idToken = resp.id_token;
+  if (!idToken) {
     throw new Error("Token response missing id_token.");
   }
   const tokens: StoredTokens = {
     access_token: resp.access_token,
-    id_token: resp.id_token,
+    id_token: idToken,
     account_id: account.accountId,
   };
   if (resp.refresh_token) {
@@ -167,7 +223,8 @@ async function refreshTokens(refreshToken: string): Promise<TokenResponse> {
     const text = await res.text().catch(() => "");
     throw new Error(`Token refresh failed (${res.status}): ${text.slice(0, 300)}`);
   }
-  return (await res.json()) as TokenResponse;
+  const json: unknown = await res.json();
+  return validateTokenResponse(json);
 }
 
 /**

@@ -4,7 +4,6 @@ import { createServer, type Server } from "node:http";
 
 import { decodeIdToken } from "./jwt.js";
 import {
-  CODEX_ORIGINATOR,
   OAUTH_AUTHORIZE_URL,
   OAUTH_CLIENT_ID,
   OAUTH_REDIRECT_PATH,
@@ -12,7 +11,8 @@ import {
   OAUTH_SCOPE,
   OAUTH_TOKEN_URL,
 } from "./openai-endpoints.js";
-import { saveFromExchange, type TokenResponse } from "./token-store.js";
+import { CODEX_ORIGINATOR } from "./openai-private-backend.js";
+import { saveFromExchange, validateTokenResponse, type TokenResponse } from "./token-store.js";
 
 const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
 const CALLBACK_HOST = "127.0.0.1";
@@ -199,7 +199,8 @@ async function exchangeCode(params: {
     const text = await res.text().catch(() => "");
     throw new Error(`Token exchange failed (${res.status}): ${text.slice(0, 300)}`);
   }
-  return (await res.json()) as TokenResponse;
+  const json: unknown = await res.json();
+  return validateTokenResponse(json, { requireIdToken: true });
 }
 
 /**
