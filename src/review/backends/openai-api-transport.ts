@@ -8,10 +8,10 @@ import type { OpenAIToolRoundRequest, OpenAIToolRoundResult, OpenAITransport } f
 const REQUEST_TIMEOUT_MS = 600_000;
 
 const MISSING_OPENAI_API_KEY_MESSAGE =
-  "OPENAI_API_KEY not set for the OpenAI provider.\n" +
+  "OPENAI_API_KEY not set for official OpenAI API auth mode.\n" +
   '  export OPENAI_API_KEY="sk-..."\n' +
   "  or add it to ~/.config/thermo-review/env\n" +
-  "  (Experimental ChatGPT OAuth requires THERMO_REVIEW_OPENAI_AUTH=chatgpt.)";
+  "  ChatGPT OAuth is the default; remove the api override or set THERMO_REVIEW_OPENAI_AUTH=chatgpt to use it.";
 
 function extractText(response: Response): string {
   if (response.output_text) {

@@ -6,7 +6,7 @@ It runs through one of two interchangeable backends:
 
 | Provider | Runtime | Auth |
 |----------|---------|------|
-| `openai` (default) | OpenAI Responses API tool loop + sandboxed git/file tools | `OPENAI_API_KEY` (official API) |
+| `openai` (default) | OpenAI/ChatGPT tool loop + sandboxed git/file tools | ChatGPT OAuth (`thermo-review login`); official API opt-in |
 | `cursor` | [Cursor SDK](https://cursor.com/docs/sdk/typescript) local agent | `CURSOR_API_KEY` |
 
 ```text
@@ -16,7 +16,7 @@ git push
   → VERDICT: BLOCK → push blocked, copy review into your agent
 ```
 
-Pick the backend with `--provider`, the `THERMO_REVIEW_PROVIDER` env var, or the config file (see [Providers](#providers)). The default is `openai` using the official OpenAI API — set `OPENAI_API_KEY`, then `git push` reviews through the same repo-inspection contract as Cursor. Set `--provider cursor` (or `THERMO_REVIEW_PROVIDER=cursor`) to use the Cursor backend instead.
+Pick the backend with `--provider`, the `THERMO_REVIEW_PROVIDER` env var, or the config file (see [Providers](#providers)). The default is `openai` using ChatGPT OAuth — run `thermo-review login` once, then plain `git push` reviews through the same repo-inspection contract as Cursor. Set `THERMO_REVIEW_OPENAI_AUTH=api` with `OPENAI_API_KEY` to use the official API instead, or set `--provider cursor` (or `THERMO_REVIEW_PROVIDER=cursor`) to use Cursor.
 
 ## Why this exists
 
@@ -38,7 +38,7 @@ flowchart TD
   cli --> scope[Resolve commits being pushed]
   scope --> backend{Provider}
   backend -->|cursor| cur[Local Cursor SDK agent]
-  backend -->|openai| oai[OpenAI Responses tool loop + git/file tools]
+  backend -->|openai| oai[OpenAI/ChatGPT tool loop + git/file tools]
   cur --> parse[Parse VERDICT + SUMMARY]
   oai --> parse
   parse -->|PASS| allow[exit 0 — push proceeds]
@@ -53,31 +53,31 @@ The agent reviews the git diff in scope, inlines the thermo-nuclear skill instru
 
 `thermo-review` resolves the backend in this order: `--provider <name>` flag → `THERMO_REVIEW_PROVIDER` env → `~/.config/thermo-review/config.json` (`{"provider": "cursor"}`) → default `openai`.
 
-### OpenAI Responses tool loop (default)
+### OpenAI tool loop (default)
 
-Uses the official OpenAI API with sandboxed repo tools, not an inlined/truncated diff. Configure an API key:
-
-```bash
-export OPENAI_API_KEY="sk-..."
-thermo-review review --provider openai
-```
-
-The model defaults to `gpt-5.5` (run with `high` reasoning effort) and is overridable with `THERMO_REVIEW_OPENAI_MODEL` or the config-file `openaiModel` key. The OpenAI backend must use `git_diff`, `git_log`, `list_files`, and `read_file` before returning a verdict; oversized tool outputs return explicit errors so the model narrows scope instead of silently reviewing a prefix.
-
-#### Experimental ChatGPT OAuth transport
-
-If you intentionally want to use a ChatGPT subscription instead of the official API, opt in explicitly with `THERMO_REVIEW_OPENAI_AUTH=chatgpt` or config `{"openaiAuth":"chatgpt"}`:
+Uses ChatGPT OAuth by default with sandboxed repo tools, not an inlined/truncated diff. Sign in once, then plain `thermo-review review` or `git push` uses this transport:
 
 ```bash
 thermo-review login           # opens a browser, completes OAuth on localhost:1455
-THERMO_REVIEW_OPENAI_AUTH=chatgpt thermo-review review --provider openai
+thermo-review review --provider openai
 thermo-review logout          # remove stored credentials
 ```
 
 Credentials are cached at `~/.config/thermo-review/openai-auth.json` (mode `0600`) and refreshed automatically before expiry.
 
+The model defaults to `gpt-5.5` (run with `high` reasoning effort) and is overridable with `THERMO_REVIEW_OPENAI_MODEL` or the config-file `openaiModel` key. The OpenAI backend must use `git_diff`, `git_log`, `list_files`, and `read_file` before returning a verdict; oversized tool outputs return explicit errors so the model narrows scope instead of silently reviewing a prefix.
+
+#### Official OpenAI API transport
+
+To use the official API instead of the default ChatGPT OAuth transport, opt in with `THERMO_REVIEW_OPENAI_AUTH=api` or config `{"openaiAuth":"api"}` and provide an API key:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+THERMO_REVIEW_OPENAI_AUTH=api thermo-review review --provider openai
+```
+
 > ⚠️ **Known risks — experimental ChatGPT auth.**
-> This path uses your **ChatGPT subscription** (not OpenAI Platform API credits) by calling the same ChatGPT backend the Codex CLI uses, and it sends Codex-style `originator` / `User-Agent` headers so the backend accepts the request. OpenAI's own docs steer programmatic/automation workflows toward API keys. Driving an automated pre-push gate this way is a **gray area**: requests consume your ChatGPT plan allowance (rolling rate limits), and abuse "may result in rate limits, suspension, or termination." Use it for single-user local review only; do not pool or share tokens. The OAuth client id, endpoints, model availability, and backend request shape are reverse-engineered from Codex and **undocumented by OpenAI** — they can change without notice and break sign-in or reviews.
+> The default ChatGPT OAuth path uses your **ChatGPT subscription** (not OpenAI Platform API credits) by calling the same ChatGPT backend the Codex CLI uses, and it sends Codex-style `originator` / `User-Agent` headers so the backend accepts the request. OpenAI's own docs steer programmatic/automation workflows toward API keys. Driving an automated pre-push gate this way is a **gray area**: requests consume your ChatGPT plan allowance (rolling rate limits), and abuse "may result in rate limits, suspension, or termination." Use it for single-user local review only; do not pool or share tokens. The OAuth client id, endpoints, model availability, and backend request shape are reverse-engineered from Codex and **undocumented by OpenAI** — they can change without notice and break sign-in or reviews.
 
 ### Cursor
 
@@ -98,10 +98,10 @@ Requires `CURSOR_API_KEY` and the Cursor IDE / local agent bridge. See [setup](#
 |-------------|-------|
 | **Node.js 22+** | `node -v` |
 | **git** | Any recent version |
-| **OpenAI API key** | _OpenAI provider default_ — `OPENAI_API_KEY` |
+| **ChatGPT account** | _Default OpenAI auth_ — used via `thermo-review login` |
+| **OpenAI API key** | _Optional official API auth_ — `OPENAI_API_KEY` + `THERMO_REVIEW_OPENAI_AUTH=api` |
 | **Cursor IDE** | _Cursor provider only_ — with CLI / local agent bridge working |
 | **Cursor API key** | _Cursor provider only_ — [Dashboard → Integrations](https://cursor.com/dashboard/integrations) |
-| **ChatGPT account** | _Optional experimental OpenAI auth_ — used via `thermo-review login` + `THERMO_REVIEW_OPENAI_AUTH=chatgpt` |
 
 The thermo-nuclear skill is **bundled** with the package, so no plugin install is required. If you have the **cursor-team-kit** plugin installed in Cursor, its copy is used automatically; otherwise the bundled copy is used. Override either with `THERMO_REVIEW_SKILL_PATH=/path/to/SKILL.md`.
 
@@ -131,7 +131,14 @@ You should see the `review` and `hook` subcommands.
 Default OpenAI provider:
 
 ```bash
+thermo-review login
+```
+
+Official OpenAI API instead:
+
+```bash
 export OPENAI_API_KEY="sk-..."
+export THERMO_REVIEW_OPENAI_AUTH=api
 ```
 
 Cursor provider:
@@ -140,18 +147,20 @@ Cursor provider:
 export CURSOR_API_KEY="cursor_..."
 ```
 
-Hooks do not always inherit your shell profile. A dedicated env file is more reliable:
+Hooks do not always inherit your shell profile. A dedicated env file is more reliable for API-key based modes:
 
 ```bash
 mkdir -p ~/.config/thermo-review
 cat > ~/.config/thermo-review/env <<'EOF'
-export OPENAI_API_KEY="sk_YOUR_KEY_HERE"
+# Optional: use the official OpenAI API instead of default ChatGPT OAuth
+# export OPENAI_API_KEY="sk_YOUR_KEY_HERE"
+# export THERMO_REVIEW_OPENAI_AUTH=api
 # export CURSOR_API_KEY="cursor_YOUR_KEY_HERE"   # only for --provider cursor
 EOF
 chmod 600 ~/.config/thermo-review/env
 ```
 
-The pre-push hook sources this file automatically when present.
+The pre-push hook sources this file automatically when present; ChatGPT OAuth tokens from `thermo-review login` are read from `~/.config/thermo-review/openai-auth.json`.
 
 ### 4. Install the pre-push hook
 
@@ -205,7 +214,7 @@ Expected outcomes:
 
 - **PASS** — prints `VERDICT: PASS — <summary>`, exit code 0
 - **BLOCK** — prints a bordered report with "COPY BELOW INTO CURSOR AGENT", exit code 3
-- **Config error** — missing API key, exit code 1 with setup instructions
+- **Config error** — missing login/API key, exit code 1 with setup instructions
 
 Try JSON output for scripting:
 
@@ -238,7 +247,7 @@ THERMO_REVIEW_SKIP=1 git push     # skip thermo-review only
 ```bash
 thermo-review review
 thermo-review review --base main
-thermo-review review --provider openai   # use the OpenAI backend (requires OPENAI_API_KEY by default)
+thermo-review review --provider openai   # use the OpenAI backend (ChatGPT auth by default)
 thermo-review review --quiet       # verdict line only
 thermo-review review --json        # machine-readable
 thermo-review review --skip        # no-op, exit 0
@@ -303,7 +312,7 @@ Then the full review. If these lines are missing, the hook **fails closed** (BLO
 
 ### `OPENAI_API_KEY not set`
 
-The default OpenAI auth mode uses the official API. Create `~/.config/thermo-review/env` (see step 3) or export `OPENAI_API_KEY` in your shell.
+This only applies when you opt into official API auth with `THERMO_REVIEW_OPENAI_AUTH=api` or config `{"openaiAuth":"api"}`. Create `~/.config/thermo-review/env` (see step 3) or export `OPENAI_API_KEY` in your shell.
 
 ### `CURSOR_API_KEY not set`
 
@@ -315,7 +324,7 @@ A copy of the skill ships with the package, so this should be rare. If you set `
 
 ### OpenAI provider: `Not signed in to OpenAI`
 
-This only applies when `THERMO_REVIEW_OPENAI_AUTH=chatgpt`. Run `thermo-review login` to complete the experimental Sign in with ChatGPT flow. If the browser does not open, copy the printed URL manually. The callback listens on `localhost:1455` (falls back to `1457`) — make sure that port is free and not blocked by a firewall. If reviews start failing with auth errors after working before, run `thermo-review login` again (the OAuth client and backend are undocumented and can change).
+The default OpenAI auth mode uses ChatGPT OAuth. Run `thermo-review login` to complete the experimental Sign in with ChatGPT flow. If the browser does not open, copy the printed URL manually. The callback listens on `localhost:1455` (falls back to `1457`) — make sure that port is free and not blocked by a firewall. If reviews start failing with auth errors after working before, run `thermo-review login` again (the OAuth client and backend are undocumented and can change).
 
 ### `command not found: thermo-review`
 

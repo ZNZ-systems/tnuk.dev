@@ -1,9 +1,9 @@
 // Experimental ChatGPT/Codex compatibility layer.
 //
-// This is deliberately narrow: only explicit `openaiAuth: "chatgpt"` runs use
-// these undocumented backend details and Codex-shaped headers. The stable
-// OpenAI path uses the official API with OPENAI_API_KEY and never imports this
-// module outside the OpenAI backend/OAuth flow.
+// This is deliberately narrow: only the ChatGPT auth transport uses these
+// undocumented backend details and Codex-shaped headers. The official API path
+// uses OPENAI_API_KEY and never imports this module outside the OpenAI
+// backend/OAuth flow.
 
 export const CHATGPT_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 

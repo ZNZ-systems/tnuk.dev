@@ -1,8 +1,8 @@
 // Experimental "Sign in with ChatGPT" OAuth constants.
 //
 // These mirror the Codex CLI's public PKCE client. They are reverse-engineered
-// from Codex and undocumented by OpenAI; the ChatGPT auth mode is explicit
-// opt-in and may break without notice (see README "Experimental ChatGPT OAuth").
+// from Codex and undocumented by OpenAI; the ChatGPT auth mode may break
+// without notice (see README "Known risks — experimental ChatGPT auth").
 
 export const OAUTH_ISSUER = "https://auth.openai.com";
 export const OAUTH_AUTHORIZE_URL = `${OAUTH_ISSUER}/oauth/authorize`;

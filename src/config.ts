@@ -14,7 +14,7 @@ export const GIT_TEMPLATE_HOOKS_DIR = join(GIT_TEMPLATE_DIR, "hooks");
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
 const CONFIG_KEYS = ["provider", "skillPath", "openaiModel", "openaiAuth"] as const;
 const PROVIDERS = ["cursor", "openai"] as const satisfies readonly ProviderId[];
-const OPENAI_AUTH_MODES = ["api", "chatgpt"] as const;
+const OPENAI_AUTH_MODES = ["chatgpt", "api"] as const;
 
 export type OpenAIAuthMode = (typeof OPENAI_AUTH_MODES)[number];
 
@@ -195,19 +195,19 @@ export function loadApiKey(): string | undefined {
   return loadEnvVar(["CURSOR_API_KEY"]);
 }
 
-/** Loads the official OpenAI API key for the stable OpenAI provider mode. */
+/** Loads the official OpenAI API key for the api auth mode. */
 export function loadOpenAIApiKey(): string | undefined {
   return loadEnvVar(["THERMO_REVIEW_OPENAI_API_KEY", "OPENAI_API_KEY"]);
 }
 
-/** Selects official OpenAI API auth by default; ChatGPT OAuth is explicit opt-in. */
+/** Selects ChatGPT OAuth by default; official OpenAI API auth is opt-in. */
 export function loadOpenAIAuthMode(): OpenAIAuthMode {
   const fromEnv = envEnumValue(
     "THERMO_REVIEW_OPENAI_AUTH",
     loadEnvVar(["THERMO_REVIEW_OPENAI_AUTH"]),
     OPENAI_AUTH_MODES,
   );
-  return fromEnv ?? loadConfigFile().openaiAuth ?? "api";
+  return fromEnv ?? loadConfigFile().openaiAuth ?? "chatgpt";
 }
 
 /**

@@ -68,7 +68,7 @@ program
 
 program
   .command("login")
-  .description("Sign in with ChatGPT for experimental OpenAI auth mode")
+  .description("Sign in with ChatGPT for default OpenAI auth mode")
   .action(async () => {
     const { loginOpenAI } = await import("./auth/openai-oauth.js");
     try {
@@ -78,7 +78,7 @@ program
       const who = result.email ? ` as ${result.email}` : "";
       const plan = result.planType ? ` (plan: ${result.planType})` : "";
       process.stdout.write(
-        `Signed in${who}${plan}. Set THERMO_REVIEW_OPENAI_AUTH=chatgpt to use this experimental transport.\n`,
+        `Signed in${who}${plan}. ChatGPT auth is now the default for the OpenAI provider.\n`,
       );
       process.exit(0);
     } catch (err) {
@@ -154,14 +154,14 @@ program.addHelpText(
 Examples:
   thermo-review review
   thermo-review review --provider openai
-  thermo-review login                       # Sign in with ChatGPT (experimental auth mode)
+  thermo-review login                       # Sign in with ChatGPT (default OpenAI auth mode)
   THERMO_REVIEW_PROVIDER=openai git push
   THERMO_REVIEW_SKIP=1 git push
 
 Environment:
   THERMO_REVIEW_PROVIDER       openai (default) | cursor
-  OPENAI_API_KEY               Official OpenAI API key (default OpenAI auth mode)
-  THERMO_REVIEW_OPENAI_AUTH    api (default) | chatgpt (experimental OAuth transport)
+  OPENAI_API_KEY               Official OpenAI API key (only with THERMO_REVIEW_OPENAI_AUTH=api)
+  THERMO_REVIEW_OPENAI_AUTH    chatgpt (default OAuth transport) | api (official API)
   CURSOR_API_KEY               Cursor API key (required for --provider cursor)
   THERMO_REVIEW_OPENAI_MODEL   Override the OpenAI model (default: gpt-5.5)
   THERMO_REVIEW_SKILL_PATH     Path to a thermo-nuclear SKILL.md override

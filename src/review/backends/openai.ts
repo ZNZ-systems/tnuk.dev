@@ -115,9 +115,9 @@ function mirrorReview(rawText: string): void {
 }
 
 /**
- * OpenAI backend: stable official API by default, experimental ChatGPT/Codex via
- * an isolated transport adapter. Both modes share the same sandboxed tool loop
- * and backend-enforced evidence state machine.
+ * OpenAI backend: ChatGPT/Codex by default, official API via an isolated
+ * transport adapter when selected. Both modes share the same sandboxed tool
+ * loop and backend-enforced evidence state machine.
  */
 export class OpenAIBackend implements ReviewBackend {
   readonly id = "openai" as const;
