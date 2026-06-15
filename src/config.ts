@@ -197,6 +197,13 @@ export function codexUserAgent(): string {
   return `codex_cli_rs/0.0.0 (${process.platform}; ${process.arch})`;
 }
 
+/** Wall-clock ceiling for an OpenAI review run, so a stalled stream can't hang. */
+export function openaiTimeoutMs(): number {
+  const raw = process.env["THERMO_REVIEW_OPENAI_TIMEOUT_MS"];
+  const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(n) && n > 0 ? n : 300_000;
+}
+
 export function shouldSkipReview(explicitSkip: boolean): boolean {
   return explicitSkip || process.env["THERMO_REVIEW_SKIP"] === "1";
 }

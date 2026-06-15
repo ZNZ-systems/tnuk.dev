@@ -178,6 +178,45 @@ export function scopeForPrePush(
   };
 }
 
+// Lock/generated files that bloat a diff without being worth reviewing.
+const DIFF_EXCLUDES = [
+  ":(exclude)package-lock.json",
+  ":(exclude)pnpm-lock.yaml",
+  ":(exclude)yarn.lock",
+  ":(exclude)*.lock",
+  ":(exclude)dist",
+  ":(exclude)build",
+  ":(exclude)*.min.js",
+  ":(exclude)*.map",
+  ":(exclude)*.snap",
+];
+
+export interface ScopeDiff {
+  stat: string;
+  patch: string;
+  log: string;
+  truncated: boolean;
+}
+
+/**
+ * Collects the review diff (stat + patch + log) with lock/generated files
+ * excluded and the patch capped, so a backend can inject it directly instead of
+ * making the agent reconstruct it tool-call by tool-call.
+ */
+export function collectScopeDiff(scope: ReviewScope, maxPatchChars = 120_000): ScopeDiff {
+  const range = `${scope.fromSha}..${scope.toSha}`;
+  const pathspec = [".", ...DIFF_EXCLUDES];
+  const stat = gitTry(scope.repoRoot, ["diff", "--stat", range, "--", ...pathspec]) ?? "";
+  const log = gitTry(scope.repoRoot, ["log", "--oneline", range]) ?? "";
+  let patch = gitTry(scope.repoRoot, ["diff", range, "--", ...pathspec]) ?? "";
+  let truncated = false;
+  if (patch.length > maxPatchChars) {
+    patch = patch.slice(0, maxPatchChars);
+    truncated = true;
+  }
+  return { stat, patch, log, truncated };
+}
+
 /**
  * Returns true if there are file changes in the review range. Used to skip the
  * agent entirely when there is nothing to review (e.g. pushing the base branch
