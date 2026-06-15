@@ -381,9 +381,12 @@ src/
     run.ts                     Orchestrator: skill → prompt → backend → parse → format
     backend.ts                 ReviewBackend interface + BackendError
     provider.ts                Backend selection (lazy-imports the chosen backend)
-    backends/cursor.ts         Cursor SDK runner
-    backends/openai.ts         OpenAI Responses tool-loop runner
-    tools.ts                   Sandboxed git/file tools for the OpenAI backend
+    backends/cursor.ts                  Cursor SDK runner
+    backends/openai.ts                  OpenAI backend orchestration + evidence gate
+    backends/openai-transport.ts        Shared OpenAI transport contract
+    backends/openai-api-transport.ts    Official OpenAI API adapter
+    backends/chatgpt-codex-transport.ts Experimental ChatGPT/Codex adapter
+    tools.ts                            Typed sandboxed git/file tools + evidence tracker
     prompt.ts                  Review prompt builder (shared)
     parse-verdict.ts           VERDICT/SUMMARY parser (shared)
     format-blocked.ts          Terminal output formatter (shared)

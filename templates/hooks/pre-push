@@ -5,7 +5,7 @@
 command -v thermo-review >/dev/null 2>&1 || exit 0
 [ -n "$THERMO_REVIEW_SKIP" ] && exit 0
 
-# Optional: source API key from config file
+# Optional: source provider credentials/settings from config file
 if [ -f "$HOME/.config/thermo-review/env" ]; then
   # shellcheck disable=SC1091
   . "$HOME/.config/thermo-review/env"

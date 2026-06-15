@@ -195,37 +195,10 @@ export function reviewDiffPathspec(): string[] {
   return [".", ...REVIEW_DIFF_EXCLUDES];
 }
 
-export interface ScopeDiff {
-  stat: string;
-  patch: string;
-  log: string;
-  truncated: boolean;
-}
-
-/**
- * Collects the review diff (stat + patch + log) with lock/generated files
- * excluded. This helper is intentionally fail-closed: callers that inline a diff
- * must not silently review a prefix of a larger change.
- */
-export function collectScopeDiff(scope: ReviewScope, maxPatchChars = 120_000): ScopeDiff {
-  const range = `${scope.fromSha}..${scope.toSha}`;
-  const pathspec = reviewDiffPathspec();
-  const stat = gitTry(scope.repoRoot, ["diff", "--stat", range, "--", ...pathspec]) ?? "";
-  const log = gitTry(scope.repoRoot, ["log", "--oneline", range]) ?? "";
-  const patch = gitTry(scope.repoRoot, ["diff", range, "--", ...pathspec]) ?? "";
-  if (patch.length > maxPatchChars) {
-    throw new Error(
-      `Review diff is ${patch.length} chars, exceeding the inline limit of ${maxPatchChars}. ` +
-        "Use a tool-capable backend or narrow the review scope; refusing to review a truncated diff.",
-    );
-  }
-  return { stat, patch, log, truncated: false };
-}
-
 /**
  * Returns true if there are reviewable file changes in the review range (using
- * the same lock/generated exclusions as diff collection). Used to skip the agent
- * entirely when there is nothing to review, which otherwise leaves it looping.
+ * the same lock/generated exclusions as the review tools). Used to skip the
+ * agent entirely when there is nothing to review, which otherwise leaves it looping.
  */
 export function scopeHasChanges(scope: ReviewScope): boolean {
   if (scope.fromSha === scope.toSha) {

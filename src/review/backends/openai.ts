@@ -1,38 +1,24 @@
-import OpenAI from "openai";
 import type {
-  Response,
   ResponseFunctionToolCall,
   ResponseInput,
   ResponseInputItem,
-  ResponseOutputItem,
-  Tool,
 } from "openai/resources/responses/responses";
 
-import { CHATGPT_CODEX_BASE_URL, chatGptBackendHeaders } from "../../auth/openai-private-backend.js";
-import { getValidCredentials } from "../../auth/token-store.js";
+import { loadOpenAIAuthMode, openaiModel, openaiTimeoutMs } from "../../config.js";
 import {
-  loadOpenAIApiKey,
-  loadOpenAIAuthMode,
-  openaiModel,
-  openaiTimeoutMs,
-  type OpenAIAuthMode,
-} from "../../config.js";
-import { executeReviewTool, REVIEW_TOOLS } from "../tools.js";
+  ReviewEvidenceTracker,
+  ReviewToolRegistry,
+  type ReviewToolExecution,
+} from "../tools.js";
 import {
   BackendError,
   type BackendRunInput,
   type BackendRunOutput,
   type ReviewBackend,
 } from "../backend.js";
+import type { OpenAITransport } from "./openai-transport.js";
 
-const REQUEST_TIMEOUT_MS = 600_000;
 const MAX_TOOL_ROUNDS = 24;
-
-const MISSING_OPENAI_API_KEY_MESSAGE =
-  "OPENAI_API_KEY not set for the OpenAI provider.\n" +
-  '  export OPENAI_API_KEY="sk-..."\n' +
-  "  or add it to ~/.config/thermo-review/env\n" +
-  "  (Experimental ChatGPT OAuth requires THERMO_REVIEW_OPENAI_AUTH=chatgpt.)";
 
 const SYSTEM_INSTRUCTIONS = [
   "You are an automated pre-push code-quality review gate.",
@@ -43,42 +29,6 @@ const SYSTEM_INSTRUCTIONS = [
   "If you cannot inspect enough evidence to satisfy the gate, fail closed with VERDICT: BLOCK and explain the missing evidence.",
   "Do not ask the user for more files. Respond exactly in the verdict format specified by the user message.",
 ].join(" ");
-
-interface ClientBundle {
-  client: OpenAI;
-  authMode: OpenAIAuthMode;
-}
-
-function buildOfficialClient(apiKey: string): OpenAI {
-  return new OpenAI({
-    apiKey,
-    timeout: REQUEST_TIMEOUT_MS,
-    maxRetries: 1,
-  });
-}
-
-async function buildChatGptClient(): Promise<OpenAI> {
-  const creds = await getValidCredentials();
-  return new OpenAI({
-    baseURL: CHATGPT_CODEX_BASE_URL,
-    apiKey: creds.accessToken,
-    timeout: REQUEST_TIMEOUT_MS,
-    maxRetries: 1,
-    defaultHeaders: chatGptBackendHeaders(creds.accountId),
-  });
-}
-
-async function buildClient(): Promise<ClientBundle> {
-  const authMode = loadOpenAIAuthMode();
-  if (authMode === "api") {
-    const apiKey = loadOpenAIApiKey();
-    if (!apiKey) {
-      throw new BackendError(MISSING_OPENAI_API_KEY_MESSAGE, "config");
-    }
-    return { client: buildOfficialClient(apiKey), authMode };
-  }
-  return { client: await buildChatGptClient(), authMode };
-}
 
 function buildUserInput(prompt: string): string {
   return [
@@ -91,27 +41,41 @@ function buildUserInput(prompt: string): string {
   ].join("\n");
 }
 
-function isFunctionCall(item: ResponseOutputItem): item is ResponseFunctionToolCall {
+async function resolveTransport(): Promise<OpenAITransport> {
+  const authMode = loadOpenAIAuthMode();
+  if (authMode === "api") {
+    const { createOpenAIApiTransport } = await import("./openai-api-transport.js");
+    return createOpenAIApiTransport();
+  }
+  const { createChatGptCodexTransport } = await import("./chatgpt-codex-transport.js");
+  return createChatGptCodexTransport();
+}
+
+function isFunctionCall(item: { type?: unknown }): item is ResponseFunctionToolCall {
   return item.type === "function_call";
 }
 
-function parseArguments(call: ResponseFunctionToolCall): unknown {
+type ParsedArguments =
+  | { ok: true; value: unknown }
+  | { ok: false; message: string; raw: string };
+
+function parseArguments(call: ResponseFunctionToolCall): ParsedArguments {
   if (!call.arguments.trim()) {
-    return {};
+    return { ok: true, value: {} };
   }
   try {
-    return JSON.parse(call.arguments) as unknown;
+    return { ok: true, value: JSON.parse(call.arguments) as unknown };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { __invalidJson: message, raw: call.arguments };
+    return { ok: false, message, raw: call.arguments };
   }
 }
 
-function describeToolCall(call: ResponseFunctionToolCall, args: unknown): string {
-  if (typeof args !== "object" || args === null) {
+function describeToolCall(call: ResponseFunctionToolCall, args: ParsedArguments): string {
+  if (!args.ok || typeof args.value !== "object" || args.value === null) {
     return call.name;
   }
-  const obj = args as Record<string, unknown>;
+  const obj = args.value as Record<string, unknown>;
   const details: string[] = [];
   for (const key of ["mode", "kind", "format", "path", "startLine", "endLine"] as const) {
     const value = obj[key];
@@ -122,34 +86,23 @@ function describeToolCall(call: ResponseFunctionToolCall, args: unknown): string
   return details.length ? `${call.name} ${details.join(" ")}` : call.name;
 }
 
-function invalidJsonOutput(args: unknown): string | undefined {
-  if (typeof args !== "object" || args === null) {
-    return undefined;
+function executeCall(
+  registry: ReviewToolRegistry,
+  call: ResponseFunctionToolCall,
+  parsedArgs: ParsedArguments,
+): ReviewToolExecution {
+  if (!parsedArgs.ok) {
+    return registry.invalidArguments(call.name, parsedArgs.message, parsedArgs.raw);
   }
-  const obj = args as Record<string, unknown>;
-  const message = obj["__invalidJson"];
-  if (typeof message !== "string") {
-    return undefined;
-  }
-  return JSON.stringify({ ok: false, error: "invalid_arguments_json", message, raw: obj["raw"] });
+  return registry.execute(call.name, parsedArgs.value);
 }
 
-function extractText(response: Response): string {
-  if (response.output_text) {
-    return response.output_text;
-  }
-  const chunks: string[] = [];
-  for (const item of response.output) {
-    if (item.type !== "message") {
-      continue;
-    }
-    for (const block of item.content) {
-      if (block.type === "output_text") {
-        chunks.push(block.text);
-      }
-    }
-  }
-  return chunks.join("");
+function evidenceError(evidence: ReviewEvidenceTracker): BackendError {
+  return new BackendError(
+    "OpenAI returned a final answer before collecting required review evidence " +
+      `(missing: ${evidence.missingLabels().join(", ")}). Refusing to parse or emit a verdict on incomplete evidence.`,
+    "agent",
+  );
 }
 
 function mirrorReview(rawText: string): void {
@@ -160,37 +113,10 @@ function mirrorReview(rawText: string): void {
   process.stderr.write(rawText.endsWith("\n") ? rawText : `${rawText}\n`);
 }
 
-function mapError(err: unknown, authMode: OpenAIAuthMode): BackendError {
-  if (err instanceof BackendError) {
-    return err;
-  }
-  const status = (err as { status?: unknown }).status;
-  const message = err instanceof Error ? err.message : String(err);
-  if (status === 401 || status === 403 || /invalid_grant|unauthorized/i.test(message)) {
-    if (authMode === "chatgpt") {
-      return new BackendError(
-        `OpenAI ChatGPT auth rejected${typeof status === "number" ? ` (${status})` : ""}. Run \`thermo-review login\` again.`,
-        "config",
-      );
-    }
-    return new BackendError(
-      `OpenAI API key rejected${typeof status === "number" ? ` (${status})` : ""}. Check OPENAI_API_KEY.`,
-      "config",
-    );
-  }
-  if (status === 404 || /model.*not found|not supported/i.test(message)) {
-    return new BackendError(
-      `Model "${openaiModel()}" is not available for this OpenAI auth mode. Set THERMO_REVIEW_OPENAI_MODEL to one it serves.`,
-      "agent",
-    );
-  }
-  return new BackendError(`OpenAI review failed: ${message}`, "agent");
-}
-
 /**
- * Reviews via an OpenAI Responses tool loop. The stable mode uses the official
- * OpenAI API key; the experimental ChatGPT OAuth transport is available only
- * when explicitly selected by THERMO_REVIEW_OPENAI_AUTH=chatgpt.
+ * OpenAI backend: stable official API by default, experimental ChatGPT/Codex via
+ * an isolated transport adapter. Both modes share the same sandboxed tool loop
+ * and backend-enforced evidence state machine.
  */
 export class OpenAIBackend implements ReviewBackend {
   readonly id = "openai" as const;
@@ -202,7 +128,7 @@ export class OpenAIBackend implements ReviewBackend {
 
   async preflight(): Promise<void> {
     try {
-      await buildClient();
+      await resolveTransport();
     } catch (err) {
       throw err instanceof BackendError
         ? err
@@ -211,12 +137,14 @@ export class OpenAIBackend implements ReviewBackend {
   }
 
   async run({ scope, prompt, onProgress }: BackendRunInput): Promise<BackendRunOutput> {
-    const { client, authMode } = await buildClient();
+    const transport = await resolveTransport();
     const model = openaiModel();
     const input: ResponseInput = [{ role: "user", content: buildUserInput(prompt) }];
+    const registry = new ReviewToolRegistry(scope);
+    const evidence = new ReviewEvidenceTracker();
 
     onProgress(
-      `contacting OpenAI (auth=${authMode}, model=${model}, high reasoning, sandboxed repo tools)…`,
+      `contacting OpenAI (auth=${transport.id}, model=${model}, high reasoning, sandboxed repo tools)…`,
     );
 
     const timeoutMs = openaiTimeoutMs();
@@ -229,51 +157,43 @@ export class OpenAIBackend implements ReviewBackend {
           onProgress(`continuing OpenAI tool loop (${round}/${MAX_TOOL_ROUNDS})…`);
         }
 
-        const response = await client.responses.create(
-          {
-            model,
-            instructions: SYSTEM_INSTRUCTIONS,
-            input,
-            include: ["reasoning.encrypted_content"],
-            tools: [...REVIEW_TOOLS] as Tool[],
-            tool_choice: "auto",
-            parallel_tool_calls: true,
-            stream: false,
-            store: false,
-            reasoning: { effort: "high" },
-            truncation: "disabled",
-          },
-          { signal: controller.signal },
-        );
+        const roundResult = await transport.runToolRound({
+          model,
+          instructions: SYSTEM_INSTRUCTIONS,
+          input,
+          tools: registry.openAITools(),
+          signal: controller.signal,
+        });
 
-        if (response.error) {
-          throw new Error(`${response.error.code}: ${response.error.message}`);
-        }
-
-        const functionCalls = response.output.filter(isFunctionCall);
+        const functionCalls = roundResult.outputItems.filter(isFunctionCall);
         if (functionCalls.length > 0) {
           const outputs: ResponseInputItem[] = [];
           for (const call of functionCalls) {
-            const args = parseArguments(call);
-            onProgress(`tool: ${describeToolCall(call, args)}`);
+            const parsedArgs = parseArguments(call);
+            onProgress(`tool: ${describeToolCall(call, parsedArgs)}`);
+            const toolExecution = executeCall(registry, call, parsedArgs);
+            evidence.record(toolExecution);
             outputs.push({
               type: "function_call_output",
               call_id: call.call_id,
-              output: invalidJsonOutput(args) ?? executeReviewTool(scope, call.name, args),
+              output: toolExecution.output,
             });
           }
-          input.push(...(response.output as ResponseInputItem[]), ...outputs);
+          input.push(...roundResult.outputItems, ...outputs);
           continue;
         }
 
-        const rawText = extractText(response);
+        const rawText = roundResult.rawText;
         if (rawText.trim()) {
+          if (!evidence.isSatisfied()) {
+            throw evidenceError(evidence);
+          }
           mirrorReview(rawText);
-          return { rawText, runId: response.id, agentId: undefined };
+          return { rawText, runId: roundResult.responseId, agentId: undefined };
         }
 
-        if (response.incomplete_details) {
-          throw new Error(`response incomplete: ${JSON.stringify(response.incomplete_details)}`);
+        if (roundResult.incompleteDetails) {
+          throw new Error(`response incomplete: ${JSON.stringify(roundResult.incompleteDetails)}`);
         }
         throw new Error("response completed without final text or tool calls");
       }
@@ -289,7 +209,7 @@ export class OpenAIBackend implements ReviewBackend {
           "agent",
         );
       }
-      throw mapError(err, authMode);
+      throw transport.mapError(err);
     } finally {
       clearTimeout(deadline);
     }
