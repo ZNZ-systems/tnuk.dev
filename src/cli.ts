@@ -8,6 +8,7 @@ import { shouldSkipReview } from "./config.js";
 import { scopeForManualReview, scopeForPrePush } from "./git/push-scope.js";
 import { chainLocalHook, installHook, uninstallHook } from "./hook/install.js";
 import { runReview } from "./review/run.js";
+import type { ProviderId } from "./types.js";
 
 async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) {
@@ -16,31 +17,85 @@ async function readStdin(): Promise<string> {
   return readFileSync(0, "utf8");
 }
 
+function parseProvider(value: string | undefined): ProviderId | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "cursor" || value === "openai") {
+    return value;
+  }
+  process.stderr.write("Error: --provider must be 'cursor' or 'openai'\n");
+  process.exit(1);
+}
+
 const program = new Command();
 
 program
   .name("thermo-review")
-  .description("Thermo-nuclear code quality review via Cursor SDK (pre-push gate)")
+  .description("Thermo-nuclear code quality review (pre-push gate) via Cursor or OpenAI Agents SDK")
   .version("0.1.0");
 
 program
   .command("review")
   .description("Run thermo-nuclear review on current branch changes")
   .option("--base <ref>", "Base branch ref (default: auto-detect main/master)")
+  .option("--provider <name>", "Review backend: openai (default) or cursor")
   .option("--json", "Output machine-readable JSON")
   .option("--quiet", "Print only verdict line")
   .option("--skip", "Skip review (exit 0)")
-  .action(async (opts: { base?: string; json?: boolean; quiet?: boolean; skip?: boolean }) => {
-    if (shouldSkipReview(Boolean(opts.skip))) {
-      process.exit(0);
-    }
+  .action(
+    async (opts: {
+      base?: string;
+      provider?: string;
+      json?: boolean;
+      quiet?: boolean;
+      skip?: boolean;
+    }) => {
+      if (shouldSkipReview(Boolean(opts.skip))) {
+        process.exit(0);
+      }
 
-    const scope = scopeForManualReview(process.cwd(), opts.base);
-    const { exitCode } = await runReview(scope, {
-      json: Boolean(opts.json),
-      quiet: Boolean(opts.quiet),
-    });
-    process.exit(exitCode);
+      const provider = parseProvider(opts.provider);
+      const scope = scopeForManualReview(process.cwd(), opts.base);
+      const { exitCode } = await runReview(scope, {
+        json: Boolean(opts.json),
+        quiet: Boolean(opts.quiet),
+        ...(provider ? { provider } : {}),
+      });
+      process.exit(exitCode);
+    },
+  );
+
+program
+  .command("login")
+  .description("Sign in with ChatGPT (OpenAI provider) via browser OAuth")
+  .action(async () => {
+    const { loginOpenAI } = await import("./auth/openai-oauth.js");
+    try {
+      const result = await loginOpenAI({
+        onProgress: (message) => process.stderr.write(`[thermo-review] ${message}\n`),
+      });
+      const who = result.email ? ` as ${result.email}` : "";
+      const plan = result.planType ? ` (plan: ${result.planType})` : "";
+      process.stdout.write(`Signed in${who}${plan}.\n`);
+      process.exit(0);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("logout")
+  .description("Remove stored OpenAI credentials")
+  .action(async () => {
+    const { logout } = await import("./auth/token-store.js");
+    const removed = await logout();
+    process.stdout.write(
+      removed ? "Logged out (OpenAI credentials removed).\n" : "No OpenAI credentials to remove.\n",
+    );
+    process.exit(0);
   });
 
 const hookCmd = program.command("hook").description("Manage pre-push git hook");
@@ -67,17 +122,20 @@ hookCmd
   .command("run")
   .description("Run review from pre-push hook context (internal)")
   .option("--base <ref>", "Base branch ref override")
-  .action(async (opts: { base?: string }) => {
+  .option("--provider <name>", "Review backend: openai (default) or cursor")
+  .action(async (opts: { base?: string; provider?: string }) => {
     if (shouldSkipReview(false)) {
       process.exit(0);
     }
 
+    const provider = parseProvider(opts.provider);
     const stdin = await readStdin();
     const scope = scopeForPrePush(process.cwd(), stdin, opts.base);
     const { exitCode } = await runReview(scope, {
       json: false,
       quiet: false,
       failClosed: true,
+      ...(provider ? { provider } : {}),
     });
 
     if (exitCode !== 0) {
@@ -93,13 +151,17 @@ program.addHelpText(
   `
 Examples:
   thermo-review review
-  thermo-review review --base main --json
-  thermo-review hook install --global-hooks-path
+  thermo-review review --provider openai
+  thermo-review login                       # Sign in with ChatGPT (OpenAI provider)
+  THERMO_REVIEW_PROVIDER=openai git push
   THERMO_REVIEW_SKIP=1 git push
 
 Environment:
-  CURSOR_API_KEY          Cursor API key (required)
-  THERMO_REVIEW_SKIP=1    Skip review, allow push
+  THERMO_REVIEW_PROVIDER       openai (default) | cursor
+  CURSOR_API_KEY               Cursor API key (required for --provider cursor)
+  THERMO_REVIEW_OPENAI_MODEL   Override the OpenAI model (default: gpt-5.5)
+  THERMO_REVIEW_SKILL_PATH     Path to a thermo-nuclear SKILL.md override
+  THERMO_REVIEW_SKIP=1         Skip review, allow push
 `,
 );
 

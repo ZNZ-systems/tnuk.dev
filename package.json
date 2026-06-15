@@ -1,7 +1,7 @@
 {
   "name": "thermo-review-cli",
   "version": "0.1.0",
-  "description": "Pre-push thermo-nuclear code quality review via Cursor SDK",
+  "description": "Pre-push thermo-nuclear code quality review via the Cursor SDK or the OpenAI Agents SDK (Sign in with ChatGPT)",
   "type": "module",
   "license": "MIT",
   "author": "Panos Zepos",
@@ -16,6 +16,10 @@
   "keywords": [
     "cursor",
     "cursor-sdk",
+    "openai",
+    "openai-agents",
+    "agents-sdk",
+    "chatgpt",
     "git-hooks",
     "pre-push",
     "code-review",
@@ -36,11 +40,14 @@
     "prepare": "npm run build"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.13",
-    "commander": "^13.1.0"
+    "@openai/agents": "0.11.6",
+    "commander": "^13.1.0",
+    "openai": "^6.42.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

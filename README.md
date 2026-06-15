@@ -1,13 +1,22 @@
 # thermo-review
 
-**Pre-push code quality gate** powered by the [Cursor SDK](https://cursor.com/docs/sdk/typescript). Runs the [thermo-nuclear code quality review](https://github.com/cursor/cursor-team-kit) skill before every `git push`. If the review fails, push is blocked and you get a formatted block to paste back into Cursor.
+**Pre-push code quality gate** that runs the [thermo-nuclear code quality review](https://github.com/cursor/cursor-team-kit) skill before every `git push`. If the review fails, push is blocked and you get a formatted block to paste back into your agent.
+
+It runs through one of two interchangeable backends:
+
+| Provider | SDK | Auth |
+|----------|-----|------|
+| `openai` (default) | [OpenAI Agents SDK](https://openai.github.io/openai-agents-js/) | **Sign in with ChatGPT** (OAuth) |
+| `cursor` | [Cursor SDK](https://cursor.com/docs/sdk/typescript) | `CURSOR_API_KEY` |
 
 ```text
 git push
-  → thermo-review runs locally via Cursor SDK
+  → thermo-review runs locally via the selected backend
   → VERDICT: PASS  → push continues
-  → VERDICT: BLOCK → push blocked, copy review into agent
+  → VERDICT: BLOCK → push blocked, copy review into your agent
 ```
+
+Pick the backend with `--provider`, the `THERMO_REVIEW_PROVIDER` env var, or the config file (see [Providers](#providers)). The default is `openai` — run `thermo-review login` once, then `git push` reviews via the OpenAI Agents SDK. Set `--provider cursor` (or `THERMO_REVIEW_PROVIDER=cursor`) to use the Cursor backend instead.
 
 ## Why this exists
 
@@ -27,13 +36,46 @@ flowchart TD
   gitPush[git push] --> prePushHook["~/.git-templates/hooks/pre-push"]
   prePushHook --> cli["thermo-review hook run"]
   cli --> scope[Resolve commits being pushed]
-  scope --> agent[Local Cursor SDK agent]
-  agent --> parse[Parse VERDICT + SUMMARY]
+  scope --> backend{Provider}
+  backend -->|cursor| cur[Local Cursor SDK agent]
+  backend -->|openai| oai[OpenAI Agents SDK agent + git/file tools]
+  cur --> parse[Parse VERDICT + SUMMARY]
+  oai --> parse
   parse -->|PASS| allow[exit 0 — push proceeds]
   parse -->|BLOCK| block[Formatted review + exit 3]
 ```
 
-The agent reviews the git diff in scope, inlines the thermo-nuclear skill instructions, and must respond with a machine-parseable verdict before the full review body.
+The agent reviews the git diff in scope, inlines the thermo-nuclear skill instructions, and must respond with a machine-parseable verdict before the full review body. The Cursor backend uses the local agent's built-in shell/file access; the OpenAI backend is given sandboxed `git_diff` / `git_log` / `read_file` / `list_files` tools scoped to the repo root.
+
+---
+
+## Providers
+
+`thermo-review` resolves the backend in this order: `--provider <name>` flag → `THERMO_REVIEW_PROVIDER` env → `~/.config/thermo-review/config.json` (`{"provider": "cursor"}`) → default `openai`.
+
+### OpenAI Agents SDK — Sign in with ChatGPT (default)
+
+Authenticates with **Sign in with ChatGPT** OAuth — no API key. One-time login:
+
+```bash
+thermo-review login           # opens a browser, completes OAuth on localhost:1455
+thermo-review review --provider openai
+thermo-review logout          # remove stored credentials
+```
+
+Credentials are cached at `~/.config/thermo-review/openai-auth.json` (mode `0600`) and refreshed automatically before expiry. The model defaults to `gpt-5.5` (run with `high` reasoning effort) and is overridable with `THERMO_REVIEW_OPENAI_MODEL` or the config-file `openaiModel` key.
+
+> ⚠️ **Known risks — read before using the OpenAI provider.**
+> This path uses your **ChatGPT subscription** (not OpenAI Platform API credits) by calling the same ChatGPT backend the Codex CLI uses, and it sends a Codex-style `originator` / `User-Agent` so the backend accepts the request. OpenAI's own docs steer programmatic/automation workflows toward API keys. Driving an automated pre-push gate this way is a **gray area**: requests consume your ChatGPT plan allowance (rolling rate limits), and abuse "may result in rate limits, suspension, or termination." Use it for single-user local review only; do not pool or share tokens. The OAuth client id, endpoints, model availability, and backend request shape are reverse-engineered from Codex and **undocumented by OpenAI** — they can change without notice and break sign-in or reviews.
+
+### Cursor
+
+```bash
+thermo-review review --provider cursor
+# or: THERMO_REVIEW_PROVIDER=cursor / {"provider":"cursor"} in config.json
+```
+
+Requires `CURSOR_API_KEY` and the Cursor IDE / local agent bridge. See [setup](#full-setup-guide) below.
 
 ---
 
@@ -43,18 +85,13 @@ The agent reviews the git diff in scope, inlines the thermo-nuclear skill instru
 
 | Requirement | Notes |
 |-------------|-------|
-| **Node.js 20+** | `node -v` |
+| **Node.js 22+** | `node -v` |
 | **git** | Any recent version |
-| **Cursor IDE** | With CLI / local agent bridge working |
-| **Cursor API key** | [Dashboard → Integrations](https://cursor.com/dashboard/integrations) |
-| **cursor-team-kit plugin** | Provides the thermo-nuclear skill in Cursor |
+| **Cursor IDE** | _Cursor provider only_ — with CLI / local agent bridge working |
+| **Cursor API key** | _Cursor provider only_ — [Dashboard → Integrations](https://cursor.com/dashboard/integrations) |
+| **ChatGPT account** | _OpenAI provider only_ — used via `thermo-review login` |
 
-Install the plugin in Cursor if you have not already:
-
-1. Open Cursor Settings → Plugins (or Marketplace)
-2. Install **cursor-team-kit**
-3. Confirm the skill exists at:
-   `~/.cursor/plugins/cache/cursor-public/cursor-team-kit/.../thermo-nuclear-code-quality-review/SKILL.md`
+The thermo-nuclear skill is **bundled** with the package, so no plugin install is required. If you have the **cursor-team-kit** plugin installed in Cursor, its copy is used automatically; otherwise the bundled copy is used. Override either with `THERMO_REVIEW_SKILL_PATH=/path/to/SKILL.md`.
 
 ### 2. Install thermo-review
 
@@ -207,6 +244,7 @@ THERMO_REVIEW_SKIP=1 git push     # skip thermo-review only
 ```bash
 thermo-review review
 thermo-review review --base main
+thermo-review review --provider openai   # use the OpenAI backend (after `thermo-review login`)
 thermo-review review --quiet       # verdict line only
 thermo-review review --json        # machine-readable
 thermo-review review --skip        # no-op, exit 0
@@ -275,9 +313,11 @@ Create `~/.config/thermo-review/env` (see step 3) or export the variable in your
 
 ### `Thermo-nuclear skill not found`
 
-Install the **cursor-team-kit** plugin in Cursor. The CLI reads the skill from:
+A copy of the skill ships with the package, so this should be rare. If you set `THERMO_REVIEW_SKILL_PATH` or a config `skillPath`, make sure it points at a readable `SKILL.md`. Resolution order: `THERMO_REVIEW_SKILL_PATH` → config `skillPath` → Cursor plugin cache → bundled copy.
 
-`~/.cursor/plugins/cache/cursor-public/cursor-team-kit/.../thermo-nuclear-code-quality-review/SKILL.md`
+### OpenAI provider: `Not signed in to OpenAI`
+
+Run `thermo-review login` to complete the Sign in with ChatGPT flow. If the browser does not open, copy the printed URL manually. The callback listens on `localhost:1455` (falls back to `1457`) — make sure that port is free and not blocked by a firewall. If reviews start failing with auth errors after working before, run `thermo-review login` again (the OAuth client and backend are undocumented and can change).
 
 ### `command not found: thermo-review`
 
@@ -296,13 +336,13 @@ Ensure `thermo-review` is on PATH in non-interactive shells (npm link usually ha
 
 ### Hook runs but push is slow
 
-Local SDK reviews take as long as a Cursor agent turn (often 1–5+ minutes). This is expected. Use `THERMO_REVIEW_SKIP=1` or `--no-verify` when you need an emergency push.
+A full agent review takes as long as one agent turn (often 1–5+ minutes), on either backend. This is expected. Use `THERMO_REVIEW_SKIP=1` or `--no-verify` when you need an emergency push.
 
 ### `Repository has no commits yet`
 
 Make at least one commit before running review.
 
-### SDK startup failed
+### Cursor provider: SDK startup failed
 
 - Confirm Cursor is installed and the local agent bridge works
 - Verify API key at [cursor.com/dashboard/integrations](https://cursor.com/dashboard/integrations)
@@ -313,9 +353,10 @@ Make at least one commit before running review.
 ## Uninstall
 
 ```bash
+thermo-review logout              # remove stored OpenAI credentials (if used)
 thermo-review hook uninstall
 npm unlink -g thermo-review-cli
-rm -rf ~/.config/thermo-review    # optional, removes API key file
+rm -rf ~/.config/thermo-review    # optional, removes API key + OpenAI auth files
 ```
 
 ---
@@ -335,16 +376,28 @@ npm run dev    # watch mode
 
 ```text
 src/
-  cli.ts                   Commander entrypoint
-  config.ts                API key + skill loading
+  cli.ts                       Commander entrypoint (review, login, logout, hook)
+  config.ts                    Provider/key/skill resolution + config file
+  types.ts                     Shared types (ProviderId, ReviewScope, …)
   review/
-    run.ts                 Cursor SDK agent runner
-    prompt.ts              Review prompt builder
-    parse-verdict.ts       VERDICT/SUMMARY parser
-    format-blocked.ts      Terminal output formatter
-  git/push-scope.ts        Pre-push diff scope
-  hook/install.ts          Hook install/uninstall
-templates/hooks/pre-push   Shell hook template
+    run.ts                     Orchestrator: skill → prompt → backend → parse → format
+    backend.ts                 ReviewBackend interface + BackendError
+    provider.ts                Backend selection (lazy-imports the chosen backend)
+    backends/cursor.ts         Cursor SDK runner
+    backends/openai.ts         OpenAI Agents SDK runner (ChatGPT backend)
+    tools.ts                   Sandboxed git/file tools for the OpenAI agent
+    prompt.ts                  Review prompt builder (shared)
+    parse-verdict.ts           VERDICT/SUMMARY parser (shared)
+    format-blocked.ts          Terminal output formatter (shared)
+  auth/
+    openai-oauth.ts            Sign in with ChatGPT PKCE flow
+    token-store.ts             Credential storage + refresh
+    jwt.ts                     id_token claim decoding
+    openai-endpoints.ts        OAuth + ChatGPT backend constants
+  git/push-scope.ts            Pre-push diff scope
+  hook/install.ts              Hook install/uninstall
+templates/hooks/pre-push       Shell hook template
+templates/skills/thermo-nuclear/SKILL.md   Bundled review skill
 ```
 
 ---
@@ -356,4 +409,5 @@ templates/hooks/pre-push   Shell hook template
 ## Acknowledgments
 
 - Review rubric from [cursor-team-kit](https://github.com/cursor/cursor-team-kit) thermo-nuclear skill
-- Built with [@cursor/sdk](https://cursor.com/docs/sdk/typescript)
+- Built with [@cursor/sdk](https://cursor.com/docs/sdk/typescript) and the [OpenAI Agents SDK](https://openai.github.io/openai-agents-js/)
+- "Sign in with ChatGPT" OAuth flow modeled on the [OpenAI Codex CLI](https://developers.openai.com/codex/auth)

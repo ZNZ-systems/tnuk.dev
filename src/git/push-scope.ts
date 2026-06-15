@@ -178,4 +178,23 @@ export function scopeForPrePush(
   };
 }
 
+/**
+ * Returns true if there are file changes in the review range. Used to skip the
+ * agent entirely when there is nothing to review (e.g. pushing the base branch
+ * with no new commits), which otherwise leaves the agent looping with no diff.
+ */
+export function scopeHasChanges(scope: ReviewScope): boolean {
+  if (scope.fromSha === scope.toSha) {
+    return false;
+  }
+  try {
+    // `git diff --quiet` exits 0 when there are no changes; execFileSync throws
+    // on the non-zero exit that signals changes (or any error → treat as changes).
+    git(scope.repoRoot, ["diff", "--quiet", `${scope.fromSha}..${scope.toSha}`]);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export { findRepoRoot };
