@@ -1,0 +1,5 @@
+export const MAX_GIT_BUFFER_BYTES = 32 * 1024 * 1024;
+export const DEFAULT_TOOL_OUTPUT_BYTES = 80_000;
+export const MAX_TOOL_OUTPUT_BYTES = 200_000;
+export const DEFAULT_LIST_LIMIT = 500;
+export const MAX_LIST_LIMIT = 2_000;

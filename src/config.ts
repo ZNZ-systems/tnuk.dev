@@ -12,8 +12,11 @@ export const GIT_TEMPLATE_DIR = join(homedir(), ".git-templates");
 export const GIT_TEMPLATE_HOOKS_DIR = join(GIT_TEMPLATE_DIR, "hooks");
 
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
+const CONFIG_KEYS = ["provider", "skillPath", "openaiModel", "openaiAuth"] as const;
+const PROVIDERS = ["cursor", "openai"] as const satisfies readonly ProviderId[];
+const OPENAI_AUTH_MODES = ["api", "chatgpt"] as const;
 
-export type OpenAIAuthMode = "api" | "chatgpt";
+export type OpenAIAuthMode = (typeof OPENAI_AUTH_MODES)[number];
 
 // Skill bundled with the package (dist/config.js -> ../templates/...).
 const BUNDLED_SKILL = fileURLToPath(
@@ -40,35 +43,85 @@ interface ThermoConfig {
 
 let configCache: ThermoConfig | undefined;
 
+function configError(message: string): Error {
+  return new Error(`Invalid thermo-review config at ${CONFIG_FILE}: ${message}`);
+}
+
+function assertKnownConfigKeys(obj: Record<string, unknown>): void {
+  const allowed = new Set<string>(CONFIG_KEYS);
+  const unknown = Object.keys(obj).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw configError(`unknown key(s): ${unknown.join(", ")}`);
+  }
+}
+
+function optionalConfigString(obj: Record<string, unknown>, key: "skillPath" | "openaiModel"): string | undefined {
+  const value = obj[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || !value.trim()) {
+    throw configError(`${key} must be a non-empty string`);
+  }
+  return value;
+}
+
+function optionalConfigEnum<T extends string>(
+  obj: Record<string, unknown>,
+  key: "provider" | "openaiAuth",
+  allowed: readonly T[],
+): T | undefined {
+  const value = obj[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string" && (allowed as readonly string[]).includes(value)) {
+    return value as T;
+  }
+  throw configError(`${key} must be one of: ${allowed.join(", ")}`);
+}
+
 function readConfigFile(): ThermoConfig {
   if (!existsSync(CONFIG_FILE)) {
     return {};
   }
+  let raw: string;
+  try {
+    raw = readFileSync(CONFIG_FILE, "utf8");
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw configError(`could not read file (${detail})`);
+  }
+
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));
-  } catch {
-    return {};
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw configError(`malformed JSON (${detail})`);
   }
-  if (typeof parsed !== "object" || parsed === null) {
-    return {};
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw configError("top-level value must be an object");
   }
+
   const obj = parsed as Record<string, unknown>;
+  assertKnownConfigKeys(obj);
+
   const config: ThermoConfig = {};
-  const provider = obj["provider"];
-  if (provider === "cursor" || provider === "openai") {
+  const provider = optionalConfigEnum(obj, "provider", PROVIDERS);
+  if (provider) {
     config.provider = provider;
   }
-  const skillPath = obj["skillPath"];
-  if (typeof skillPath === "string") {
+  const skillPath = optionalConfigString(obj, "skillPath");
+  if (skillPath) {
     config.skillPath = skillPath;
   }
-  const openaiModel = obj["openaiModel"];
-  if (typeof openaiModel === "string") {
+  const openaiModel = optionalConfigString(obj, "openaiModel");
+  if (openaiModel) {
     config.openaiModel = openaiModel;
   }
-  const openaiAuth = obj["openaiAuth"];
-  if (openaiAuth === "api" || openaiAuth === "chatgpt") {
+  const openaiAuth = optionalConfigEnum(obj, "openaiAuth", OPENAI_AUTH_MODES);
+  if (openaiAuth) {
     config.openaiAuth = openaiAuth;
   }
   return config;
@@ -125,6 +178,16 @@ function loadEnvVar(names: readonly string[]): string | undefined {
   return undefined;
 }
 
+function envEnumValue<T extends string>(name: string, value: string | undefined, allowed: readonly T[]): T | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if ((allowed as readonly string[]).includes(value)) {
+    return value as T;
+  }
+  throw new Error(`${name} must be one of: ${allowed.join(", ")}`);
+}
+
 /**
  * Loads CURSOR_API_KEY from env or ~/.config/thermo-review/env (Cursor provider only).
  */
@@ -139,26 +202,32 @@ export function loadOpenAIApiKey(): string | undefined {
 
 /** Selects official OpenAI API auth by default; ChatGPT OAuth is explicit opt-in. */
 export function loadOpenAIAuthMode(): OpenAIAuthMode {
-  const fromEnv = loadEnvVar(["THERMO_REVIEW_OPENAI_AUTH"]);
-  if (fromEnv === "api" || fromEnv === "chatgpt") {
-    return fromEnv;
-  }
-  return loadConfigFile().openaiAuth ?? "api";
+  const fromEnv = envEnumValue(
+    "THERMO_REVIEW_OPENAI_AUTH",
+    loadEnvVar(["THERMO_REVIEW_OPENAI_AUTH"]),
+    OPENAI_AUTH_MODES,
+  );
+  return fromEnv ?? loadConfigFile().openaiAuth ?? "api";
 }
 
 /**
- * Selects the review backend: explicit flag > THERMO_REVIEW_PROVIDER env >
- * config file > default ("openai").
+ * Validates config.json, then selects the review backend: explicit flag >
+ * THERMO_REVIEW_PROVIDER env > config file > default ("openai").
  */
 export function loadProvider(explicit?: ProviderId): ProviderId {
+  const config = loadConfigFile();
   if (explicit) {
     return explicit;
   }
-  const fromEnv = process.env["THERMO_REVIEW_PROVIDER"]?.trim();
-  if (fromEnv === "cursor" || fromEnv === "openai") {
+  const fromEnv = envEnumValue(
+    "THERMO_REVIEW_PROVIDER",
+    process.env["THERMO_REVIEW_PROVIDER"]?.trim() || undefined,
+    PROVIDERS,
+  );
+  if (fromEnv) {
     return fromEnv;
   }
-  const fromConfig = loadConfigFile().provider;
+  const fromConfig = config.provider;
   if (fromConfig) {
     return fromConfig;
   }

@@ -6,6 +6,7 @@ import type {
 
 import { loadOpenAIAuthMode, openaiModel, openaiTimeoutMs } from "../../config.js";
 import {
+  REVIEW_TOOL_NAMES,
   ReviewEvidenceTracker,
   ReviewToolRegistry,
   type ReviewToolExecution,
@@ -123,7 +124,7 @@ export class OpenAIBackend implements ReviewBackend {
   readonly capabilities = {
     canInspectRepository: true,
     inspection: "sandboxed-tools",
-    tools: ["git_diff", "git_log", "list_files", "read_file"],
+    tools: REVIEW_TOOL_NAMES,
   } as const;
 
   async preflight(): Promise<void> {
