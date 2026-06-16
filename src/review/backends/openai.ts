@@ -4,7 +4,7 @@ import type {
   ResponseInputItem,
 } from "openai/resources/responses/responses";
 
-import { loadOpenAIAuthMode, openaiModel, openaiTimeoutMs } from "../../config.js";
+import { DEFAULT_OPENAI_REASONING_EFFORT, loadOpenAIAuthMode, openaiModel, openaiTimeoutMs } from "../../config.js";
 import {
   REVIEW_TOOL_NAMES,
   ReviewEvidenceTracker,
@@ -145,7 +145,7 @@ export class OpenAIBackend implements ReviewBackend {
     const evidence = new ReviewEvidenceTracker();
 
     onProgress(
-      `contacting OpenAI (auth=${transport.id}, model=${model}, high reasoning, sandboxed repo tools)…`,
+      `contacting OpenAI (auth=${transport.id}, model=${model}, ${DEFAULT_OPENAI_REASONING_EFFORT} reasoning, sandboxed repo tools)…`,
     );
 
     const timeoutMs = openaiTimeoutMs();

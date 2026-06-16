@@ -2,6 +2,8 @@
 
 **Pre-push code quality gate** that runs the [thermo-nuclear code quality review](https://github.com/cursor/cursor-team-kit) skill before every `git push`. If the review fails, push is blocked and you get a formatted block to paste back into your agent.
 
+**Default auth is ChatGPT OAuth** — the OpenAI backend signs in with your ChatGPT account via `thermo-review login` (no OpenAI API key). The official API and Cursor SDK are opt-in alternatives.
+
 It runs through one of two interchangeable backends:
 
 | Provider | Runtime | Auth |
@@ -53,9 +55,11 @@ The agent reviews the git diff in scope, inlines the thermo-nuclear skill instru
 
 `thermo-review` resolves the backend in this order: `--provider <name>` flag → `THERMO_REVIEW_PROVIDER` env → `~/.config/thermo-review/config.json` (`{"provider": "cursor"}`) → default `openai`.
 
+For the OpenAI provider, auth resolves as: `THERMO_REVIEW_OPENAI_AUTH` env → config `openaiAuth` → default **`chatgpt`** (ChatGPT OAuth). Set `THERMO_REVIEW_OPENAI_AUTH=api` or `{"openaiAuth":"api"}` to use the official API instead.
+
 ### OpenAI tool loop (default)
 
-Uses ChatGPT OAuth by default with sandboxed repo tools, not an inlined/truncated diff. Sign in once, then plain `thermo-review review` or `git push` uses this transport:
+Uses ChatGPT OAuth (`chatgpt` auth mode) with sandboxed repo tools, not an inlined/truncated diff. Sign in once, then plain `thermo-review review` or `git push` uses this transport:
 
 ```bash
 thermo-review login           # opens a browser, completes OAuth on localhost:1455
@@ -65,7 +69,7 @@ thermo-review logout          # remove stored credentials
 
 Credentials are cached at `~/.config/thermo-review/openai-auth.json` (mode `0600`) and refreshed automatically before expiry.
 
-The model defaults to `gpt-5.5` (run with `high` reasoning effort) and is overridable with `THERMO_REVIEW_OPENAI_MODEL` or the config-file `openaiModel` key. The OpenAI backend must use `git_diff`, `git_log`, `list_files`, and `read_file` before returning a verdict; oversized tool outputs return explicit errors so the model narrows scope instead of silently reviewing a prefix.
+The model defaults to `gpt-5.5` (run with `medium` reasoning effort) and is overridable with `THERMO_REVIEW_OPENAI_MODEL` or the config-file `openaiModel` key. The OpenAI backend must use `git_diff`, `git_log`, `list_files`, and `read_file` before returning a verdict; oversized tool outputs return explicit errors so the model narrows scope instead of silently reviewing a prefix.
 
 #### Official OpenAI API transport
 
@@ -214,7 +218,7 @@ Expected outcomes:
 
 - **PASS** — prints `VERDICT: PASS — <summary>`, exit code 0
 - **BLOCK** — prints a bordered report with "COPY BELOW INTO CURSOR AGENT", exit code 3
-- **Config error** — missing login/API key, exit code 1 with setup instructions
+- **Config error** — not signed in (`thermo-review login`) or missing API key when using api auth, exit code 1 with setup instructions
 
 Try JSON output for scripting:
 
@@ -302,7 +306,7 @@ Then the full review. If these lines are missing, the hook **fails closed** (BLO
 | Code | Meaning |
 |------|---------|
 | `0` | PASS — push allowed |
-| `1` | SDK/client startup or config error (check API key/auth mode) |
+| `1` | SDK/client startup or config error (check ChatGPT login or API-key auth mode) |
 | `2` | Agent run error |
 | `3` | BLOCK — push blocked |
 

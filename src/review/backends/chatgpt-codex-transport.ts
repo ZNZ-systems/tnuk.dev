@@ -3,7 +3,7 @@ import type { ResponseInputItem } from "openai/resources/responses/responses";
 
 import { CHATGPT_CODEX_BASE_URL, chatGptBackendHeaders } from "../../auth/openai-private-backend.js";
 import { getValidCredentials } from "../../auth/token-store.js";
-import { openaiModel } from "../../config.js";
+import { DEFAULT_OPENAI_REASONING_EFFORT, openaiModel } from "../../config.js";
 import { BackendError } from "../backend.js";
 import type { OpenAIToolRoundRequest, OpenAIToolRoundResult, OpenAITransport } from "./openai-transport.js";
 
@@ -92,7 +92,7 @@ export async function createChatGptCodexTransport(): Promise<OpenAITransport> {
           parallel_tool_calls: true,
           stream: true,
           store: false,
-          reasoning: { effort: "high" },
+          reasoning: { effort: DEFAULT_OPENAI_REASONING_EFFORT },
         },
         { signal: request.signal },
       );

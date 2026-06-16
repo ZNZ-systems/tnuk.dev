@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { Response, ResponseInputItem } from "openai/resources/responses/responses";
 
-import { loadOpenAIApiKey, openaiModel } from "../../config.js";
+import { DEFAULT_OPENAI_REASONING_EFFORT, loadOpenAIApiKey, openaiModel } from "../../config.js";
 import { BackendError } from "../backend.js";
 import type { OpenAIToolRoundRequest, OpenAIToolRoundResult, OpenAITransport } from "./openai-transport.js";
 
@@ -78,7 +78,7 @@ export function createOpenAIApiTransport(): OpenAITransport {
           parallel_tool_calls: true,
           stream: false,
           store: false,
-          reasoning: { effort: "high" },
+          reasoning: { effort: DEFAULT_OPENAI_REASONING_EFFORT },
           truncation: "disabled",
         },
         { signal: request.signal },

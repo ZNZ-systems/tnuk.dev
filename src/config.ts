@@ -12,6 +12,7 @@ export const GIT_TEMPLATE_DIR = join(homedir(), ".git-templates");
 export const GIT_TEMPLATE_HOOKS_DIR = join(GIT_TEMPLATE_DIR, "hooks");
 
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
+export const DEFAULT_OPENAI_REASONING_EFFORT = "medium";
 const CONFIG_KEYS = ["provider", "skillPath", "openaiModel", "openaiAuth"] as const;
 const PROVIDERS = ["cursor", "openai"] as const satisfies readonly ProviderId[];
 const OPENAI_AUTH_MODES = ["chatgpt", "api"] as const;
