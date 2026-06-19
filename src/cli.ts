@@ -137,6 +137,7 @@ hookCmd
       json: false,
       quiet: false,
       failClosed: true,
+      lifecycle: "push",
       ...(provider ? { provider } : {}),
     });
 
@@ -166,6 +167,7 @@ Environment:
   THERMO_REVIEW_OPENAI_MODEL   Override the OpenAI model (default: gpt-5.5)
   THERMO_REVIEW_SKILL_PATH     Path to a thermo-nuclear SKILL.md override
   THERMO_REVIEW_SKIP=1         Skip review, allow push
+  THERMO_REVIEW_NO_TNUK=1      Disable the per-branch tnuk decisions ledger
 `,
 );
 

@@ -290,6 +290,23 @@ Fix these blockers from pre-push review on branch my-feature:
 
 ---
 
+## Convergent feedback (tnuk ledger)
+
+A strict reviewer is only useful if its feedback **converges**. Without memory, push 2 can suggest the opposite of push 1 ("extract this into a module" → "inline this back"), and the branch circles forever.
+
+To prevent that, each blocked review records its **standing structural decisions** in a per-branch ledger and reads them back on every subsequent review:
+
+- **Location** — under the repo's git dir at `thermo-review/tnuk/<branch>.md` (typically `.git/thermo-review/tnuk/`, and the correct per-worktree git dir for linked worktrees). The `<branch>` part is slugged — `/` and other non-`[A-Za-z0-9._-]` characters become `-`, and a lossy slug gets a short hash suffix so distinct branches never collide. Run `ls "$(git rev-parse --git-dir)/thermo-review/tnuk/"` to find your branch's file, then `cat` it. Local-only, never committed, never part of the reviewed diff.
+- **On BLOCK** — the review emits a delimited decisions block; it is folded into the ledger along with a compact history of blocking rounds.
+- **On the next review** — those decisions are injected into the prompt as **binding context**. The review must build on them and may not silently reverse a prior decision. A genuine course-correction is allowed only as an explicit, justified **reversal** on the record — so a wrong early call can still be fixed, but the feedback can't oscillate.
+- **On a passing push** — the ledger is wiped automatically (the branch converged → clean slate for the next piece of work).
+
+The manual `thermo-review review` dry run is governed by the ledger exactly like a push — it reads prior decisions as binding context and records new ones on BLOCK. Only a real passing push wipes it.
+
+Disable the ledger entirely with `THERMO_REVIEW_NO_TNUK=1`. The ledger is an aid, never a gate: if reading or writing it ever fails, the review proceeds and the verdict is unaffected.
+
+---
+
 ## Verdict contract
 
 The agent must start its response with exactly:

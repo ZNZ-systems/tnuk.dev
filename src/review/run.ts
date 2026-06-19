@@ -6,6 +6,7 @@ import { formatBlockedOutput, formatPassOutput, writeLastReview } from "./format
 import { parseVerdict } from "./parse-verdict.js";
 import { buildReviewPrompt } from "./prompt.js";
 import { resolveBackend } from "./provider.js";
+import { clearLedger, readLedger, writeLedger } from "./tnuk-ledger.js";
 
 function logProgress(message: string): void {
   process.stderr.write(`[thermo-review] ${message}\n`);
@@ -34,7 +35,7 @@ function emitVerdict(
   } else if (parsed.verdict === "BLOCK") {
     const formatted = formatBlockedOutput(parsed, scope);
     process.stdout.write(`${formatted}\n`);
-    writeLastReview(scope.repoRoot, formatted);
+    writeLastReview(scope.gitDir, formatted);
   } else {
     process.stdout.write(`${formatPassOutput(parsed)}\n`);
   }
@@ -47,9 +48,15 @@ function emitVerdict(
  */
 export async function runReview(
   scope: ReviewScope,
-  options: ReviewOutputOptions & { failClosed?: boolean; provider?: ProviderId },
+  options: ReviewOutputOptions & {
+    failClosed?: boolean;
+    provider?: ProviderId;
+    /** "push" = real pre-push gate (wipes the branch ledger on PASS); "manual" = dry run. */
+    lifecycle?: "push" | "manual";
+  },
 ): Promise<{ exitCode: number; result?: ReviewResult }> {
   const failClosed = options.failClosed ?? true;
+  const isPush = options.lifecycle === "push";
 
   if (!scopeHasChanges(scope)) {
     const parsed: ParsedVerdict = {
@@ -58,6 +65,10 @@ export async function runReview(
       body: "",
       parseFailed: false,
     };
+    // A no-change push still proceeds, so it converges the branch: clear the ledger.
+    if (isPush) {
+      clearLedger(scope);
+    }
     emitVerdict(parsed, scope, options, { runId: undefined, agentId: undefined });
     return {
       exitCode: 0,
@@ -92,7 +103,8 @@ export async function runReview(
     return { exitCode: 1 };
   }
 
-  const prompt = buildReviewPrompt(skillContent, scope);
+  const ledger = readLedger(scope);
+  const prompt = buildReviewPrompt(skillContent, scope, ledger);
 
   logProgress(
     `Reviewing ${scope.description} via ${backend.id} (${backend.capabilities.inspection})`,
@@ -118,6 +130,20 @@ export async function runReview(
   };
 
   emitVerdict(parsed, scope, options, { runId: out.runId, agentId: out.agentId });
+
+  // Persist the review's standing decisions so the next push can build on them;
+  // wipe the ledger once a push passes (convergence → clean slate). The manual
+  // `review` dry run accumulates decisions but never wipes — only a push converges.
+  if (parsed.verdict === "BLOCK") {
+    writeLedger(scope, {
+      verdict: parsed.verdict,
+      summary: parsed.summary,
+      body: parsed.body,
+      rawText: out.rawText,
+    });
+  } else if (isPush) {
+    clearLedger(scope);
+  }
 
   return {
     exitCode: parsed.verdict === "BLOCK" ? 3 : 0,

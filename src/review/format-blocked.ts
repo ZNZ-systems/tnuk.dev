@@ -51,11 +51,16 @@ export function formatBlockedOutput(
 }
 
 /**
- * Writes last review to .git/thermo-review-last.md for re-copy.
+ * Writes the last review to <gitDir>/thermo-review-last.md for re-copy. This is a
+ * convenience artifact, never a gate: a write failure (e.g. a read-only or unusual
+ * git dir) must never abort the push, so it is fully failure-isolated.
  */
-export function writeLastReview(repoRoot: string, content: string): void {
-  const path = join(repoRoot, ".git", "thermo-review-last.md");
-  writeFileSync(path, content, "utf8");
+export function writeLastReview(gitDir: string, content: string): void {
+  try {
+    writeFileSync(join(gitDir, "thermo-review-last.md"), content, "utf8");
+  } catch {
+    // Best-effort re-copy file; swallow so the verdict/exit code are unaffected.
+  }
 }
 
 /**

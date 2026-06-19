@@ -23,6 +23,17 @@ function gitTry(cwd: string, args: string[]): string | undefined {
   }
 }
 
+/**
+ * Resolves the real git directory for a repo root. Unlike `<root>/.git`, this is
+ * correct in linked worktrees and submodules (where `.git` is a file, not a dir),
+ * so local state written under it does not throw ENOTDIR. Falls back to the
+ * conventional path on very old gits without `--absolute-git-dir`.
+ */
+function resolveGitDir(repoRoot: string): string {
+  const dir = gitTry(repoRoot, ["rev-parse", "--absolute-git-dir"]);
+  return dir && dir.length > 0 ? dir : join(repoRoot, ".git");
+}
+
 function findRepoRoot(startDir: string): string {
   let dir = startDir;
   while (true) {
@@ -94,7 +105,7 @@ export function scopeForManualReview(
     ? `branch ${branch} vs merge-base with ${baseRef} (${fromSha.slice(0, 7)}..${toSha.slice(0, 7)})`
     : `branch ${branch} vs ${baseRef} (${fromSha.slice(0, 7)}..${toSha.slice(0, 7)})`;
 
-  return { repoRoot, branch, baseRef, fromSha, toSha, description };
+  return { repoRoot, gitDir: resolveGitDir(repoRoot), branch, baseRef, fromSha, toSha, description };
 }
 
 export interface PrePushLine {
@@ -160,6 +171,7 @@ export function scopeForPrePush(
     const fromSha = mergeBase ?? git(repoRoot, ["rev-parse", baseRef]);
     return {
       repoRoot,
+      gitDir: resolveGitDir(repoRoot),
       branch,
       baseRef,
       fromSha,
@@ -170,6 +182,7 @@ export function scopeForPrePush(
 
   return {
     repoRoot,
+    gitDir: resolveGitDir(repoRoot),
     branch,
     baseRef,
     fromSha: remoteSha,

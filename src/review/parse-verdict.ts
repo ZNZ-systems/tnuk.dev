@@ -52,10 +52,25 @@ export function parseVerdict(rawText: string, failClosed: boolean): ParsedVerdic
 }
 
 /**
- * Extracts numbered priority findings for terminal display.
+ * Extracts numbered priority findings.
+ *
+ * When the "## Priority findings" header is absent, the default behaviour scans the
+ * whole body for numbered lines (best-effort for terminal display). Pass
+ * `wholeBodyFallback: false` to require the header instead — used where stray
+ * numbered prose must NOT be mistaken for findings (e.g. deriving ledger decisions).
  */
-export function extractPriorityFindings(body: string): string[] {
-  const sectionMatch = /##\s*Priority findings\s*\n([\s\S]*?)(?:\n##\s|\n---|\Z)/i.exec(body);
+export function extractPriorityFindings(
+  body: string,
+  options: { wholeBodyFallback?: boolean } = {},
+): string[] {
+  const wholeBodyFallback = options.wholeBodyFallback ?? true;
+  // Stop at the next "## " heading, a "---" rule, or end of input. NOTE: `$` (not
+  // `\Z`, which JS lacks — it would match a literal "z" under the /i flag and
+  // truncate findings at the first "z").
+  const sectionMatch = /##\s*Priority findings\s*\n([\s\S]*?)(?:\n##\s|\n---|$)/i.exec(body);
+  if (!sectionMatch && !wholeBodyFallback) {
+    return [];
+  }
   const section = sectionMatch?.[1] ?? body;
 
   const findings: string[] = [];

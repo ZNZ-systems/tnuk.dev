@@ -4,6 +4,8 @@ export type ProviderId = "cursor" | "openai";
 
 export interface ReviewScope {
   repoRoot: string;
+  /** Absolute path to the real git dir (handles worktrees/submodules where `.git` is a file). */
+  gitDir: string;
   branch: string;
   baseRef: string;
   fromSha: string;
