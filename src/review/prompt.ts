@@ -68,6 +68,25 @@ Rules for this block:
 }
 
 /**
+ * Precision discipline applied to every review (all providers). These rules sharpen
+ * WHAT counts as a blocker so the gate stays high-signal; they do not lower the bar on
+ * genuine code-health regressions. Distilled from established review practice — qodo
+ * pr-agent's confidence clauses and the Code Review Pyramid (see docs/review-methodologies.md).
+ */
+function findingsDisciplineSection(): string {
+  return `## Findings discipline (precision)
+
+- A finding is a blocker ONLY if you can tie it to a concrete failure scenario or a specific
+  affected code path. If you cannot, do not flag it — or mark it explicitly non-blocking.
+- For clear correctness, security, or structural regressions, be thorough. For lower-severity
+  concerns, be certain before flagging — prefer not reporting over guessing.
+- Do not claim the change breaks other code unless you can name the specific affected code path.
+- Do not flag formatting, lint, or pure style — those belong to linters, not this gate. Spend
+  the review on structure, boundaries, and maintainability.
+- Review only the changes in scope; do not block on pre-existing issues the diff does not touch.`;
+}
+
+/**
  * Builds the agent prompt with inlined skill content, a machine-parseable verdict
  * header, and (when present) the branch's standing-decisions ledger so feedback
  * converges across pushes instead of circling.
@@ -110,6 +129,8 @@ ${diffCommands}
 2. Read changed files as needed for a deep maintainability review.
 3. Apply the thermo-nuclear review skill below strictly.
 4. Use the skill's Approval Bar: if ANY presumptive blocker applies, verdict is BLOCK.
+
+${findingsDisciplineSection()}
 
 ## Output format (MANDATORY — no text before these two lines)
 

@@ -4,12 +4,14 @@
 
 **Default auth is ChatGPT OAuth** — the OpenAI backend signs in with your ChatGPT account via `thermo-review login` (no OpenAI API key). The official API and Cursor SDK are opt-in alternatives.
 
-It runs through one of two interchangeable backends:
+It runs through one of several interchangeable backends:
 
 | Provider | Runtime | Auth |
 |----------|---------|------|
 | `openai` (default) | OpenAI/ChatGPT tool loop + sandboxed git/file tools | ChatGPT OAuth (`thermo-review login`); official API opt-in |
+| `claude` | local [`claude -p`](https://docs.claude.com/en/docs/claude-code/overview) agent with read-only repo tools | Claude Code sign-in (`claude` / `claude setup-token`) |
 | `cursor` | [Cursor SDK](https://cursor.com/docs/sdk/typescript) local agent | `CURSOR_API_KEY` |
+| `panel` | **amalgamation** — Claude reviews first, ChatGPT independently adjudicates its findings into one verdict | both Claude + OpenAI auth |
 
 ```text
 git push
@@ -18,7 +20,7 @@ git push
   → VERDICT: BLOCK → push blocked, copy review into your agent
 ```
 
-Pick the backend with `--provider`, the `THERMO_REVIEW_PROVIDER` env var, or the config file (see [Providers](#providers)). The default is `openai` using ChatGPT OAuth — run `thermo-review login` once, then plain `git push` reviews through the same repo-inspection contract as Cursor. Set `THERMO_REVIEW_OPENAI_AUTH=api` with `OPENAI_API_KEY` to use the official API instead, or set `--provider cursor` (or `THERMO_REVIEW_PROVIDER=cursor`) to use Cursor.
+Pick the backend with `--provider`, the `THERMO_REVIEW_PROVIDER` env var, or the config file (see [Providers](#providers)). The default is `openai` using ChatGPT OAuth — run `thermo-review login` once, then plain `git push` reviews through the same repo-inspection contract as the other backends. Use `--provider claude` to review with the local Claude Code CLI, or `--provider panel` for a two-model **amalgamation** where Claude's point of view is fed to ChatGPT to adjudicate (see [Multi-model amalgamation](#multi-model-amalgamation-panel)). The background and sources behind the review structure are in [docs/review-methodologies.md](docs/review-methodologies.md).
 
 ## Why this exists
 
@@ -41,8 +43,12 @@ flowchart TD
   scope --> backend{Provider}
   backend -->|cursor| cur[Local Cursor SDK agent]
   backend -->|openai| oai[OpenAI/ChatGPT tool loop + git/file tools]
+  backend -->|claude| cla["Local claude -p agent (read-only repo tools)"]
+  backend -->|panel| pan["Claude reviews → ChatGPT adjudicates (amalgamation)"]
   cur --> parse[Parse VERDICT + SUMMARY]
   oai --> parse
+  cla --> parse
+  pan --> parse
   parse -->|PASS| allow[exit 0 — push proceeds]
   parse -->|BLOCK| block[Formatted review + exit 3]
 ```
@@ -83,6 +89,18 @@ THERMO_REVIEW_OPENAI_AUTH=api thermo-review review --provider openai
 > ⚠️ **Known risks — experimental ChatGPT auth.**
 > The default ChatGPT OAuth path uses your **ChatGPT subscription** (not OpenAI Platform API credits) by calling the same ChatGPT backend the Codex CLI uses, and it sends Codex-style `originator` / `User-Agent` headers so the backend accepts the request. OpenAI's own docs steer programmatic/automation workflows toward API keys. Driving an automated pre-push gate this way is a **gray area**: requests consume your ChatGPT plan allowance (rolling rate limits), and abuse "may result in rate limits, suspension, or termination." Use it for single-user local review only; do not pool or share tokens. The OAuth client id, endpoints, model availability, and backend request shape are reverse-engineered from Codex and **undocumented by OpenAI** — they can change without notice and break sign-in or reviews.
 
+### Claude
+
+Runs the review through the local Claude Code CLI in headless print mode (`claude -p`), which inspects the repo with its own file/git tools — restricted here to a **read-only allowlist** (`Read`, `Grep`, `Glob`, and read-only `git` commands), so the reviewer can read the diff, history, and surrounding files but cannot modify the repo.
+
+```bash
+claude              # sign in once (interactive), or:
+claude setup-token  # long-lived token for hooks/CI
+thermo-review review --provider claude
+```
+
+The model defaults to `opus` (the latest Opus — the strongest reviewer) and is overridable with `THERMO_REVIEW_CLAUDE_MODEL` (alias `opus`/`sonnet`/`haiku`, or a full model id) or the config-file `claudeModel` key. Override to `sonnet` for a faster, cheaper gate. Use a capable model: the gate's strict "verdict line first" output contract needs `opus`/`sonnet`; `haiku` is not recommended. If `claude` is not on PATH in your hook environment, set `THERMO_REVIEW_CLAUDE_BIN` to its absolute path. The run is bounded by `THERMO_REVIEW_CLAUDE_TIMEOUT_MS` (default 300000).
+
 ### Cursor
 
 ```bash
@@ -91,6 +109,29 @@ thermo-review review --provider cursor
 ```
 
 Requires `CURSOR_API_KEY` and the Cursor IDE / local agent bridge. See [setup](#full-setup-guide) below.
+
+### Multi-model amalgamation (panel)
+
+`--provider panel` runs **two different models** and combines them adversarially:
+
+1. **Claude** reviews the diff first (via the `claude` backend above).
+2. **ChatGPT** then reviews the same diff *independently* and **adjudicates** Claude's findings — confirming, refuting, or refining each, and adding what Claude missed — into a single amalgamated verdict.
+
+The non-obvious part is making the second model *refine* rather than rubber-stamp the first. Naively handing model B model A's verdict triggers well-documented **sycophancy + anchoring** (a model shown a confident upstream conclusion drifts toward agreement). The panel prompt defends against this with techniques from the LLM-as-judge / ensemble literature:
+
+- **Claude's PASS/BLOCK verdict is withheld** — ChatGPT sees only the *findings*, not the conclusion.
+- **Independent-first** — ChatGPT gathers its own evidence and forms its own findings before reading Claude's.
+- **Per-item CONFIRM / REFUTE / REFINE**, each tied to a concrete failure scenario, with explicit license to call false positives.
+- **Neutral attribution** ("an independent first-pass reviewer") so it doesn't defer to "the other model".
+
+The final verdict, summary, and decisions ledger all come from the ChatGPT (adjudicator) leg, so `panel` behaves like any single backend to the rest of the gate. If the Claude leg has a transient failure the panel degrades to a ChatGPT-only review (with a warning) rather than blocking your push; a Claude *setup* error (not installed / not signed in) surfaces up front. Requires both Claude sign-in and OpenAI auth.
+
+```bash
+thermo-review review --provider panel
+# or: THERMO_REVIEW_PROVIDER=panel / {"provider":"panel"} in config.json
+```
+
+The methodology and primary sources behind this design are in [docs/review-methodologies.md](docs/review-methodologies.md).
 
 ---
 
@@ -343,6 +384,10 @@ Only needed for `--provider cursor`. Create `~/.config/thermo-review/env` (see s
 
 A copy of the skill ships with the package, so this should be rare. If you set `THERMO_REVIEW_SKILL_PATH` or a config `skillPath`, make sure it points at a readable `SKILL.md`. Resolution order: `THERMO_REVIEW_SKILL_PATH` → config `skillPath` → Cursor plugin cache → bundled copy.
 
+### Claude provider: CLI not found or not signed in
+
+`--provider claude` (and `panel`) shell out to the Claude Code CLI. If you see "Claude CLI not found on PATH", install [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and ensure `claude` is on PATH, or set `THERMO_REVIEW_CLAUDE_BIN` to its absolute path (hooks don't always inherit your shell PATH). If reviews fail with an auth error, sign in with `claude` once, or create a long-lived token for hooks/CI with `claude setup-token`. The default `opus` (or `sonnet`) follows the strict "verdict line first" contract; `haiku` is too weak for it, so don't override the model to `haiku`.
+
 ### OpenAI provider: `Not signed in to OpenAI`
 
 The default OpenAI auth mode uses ChatGPT OAuth. Run `thermo-review login` to complete the experimental Sign in with ChatGPT flow. If the browser does not open, copy the printed URL manually. The callback listens on `localhost:1455` (falls back to `1457`) — make sure that port is free and not blocked by a firewall. If reviews start failing with auth errors after working before, run `thermo-review login` again (the OAuth client and backend are undocumented and can change).
@@ -416,6 +461,9 @@ src/
     backends/openai-transport.ts        Shared OpenAI transport contract
     backends/openai-api-transport.ts    Official OpenAI API adapter
     backends/chatgpt-codex-transport.ts Experimental ChatGPT/Codex adapter
+    backends/claude.ts                  Claude backend: claude -p CLI runner (read-only tools)
+    backends/panel.ts                   Panel backend: Claude → ChatGPT amalgamation
+    amalgamate.ts              Anti-rubber-stamping adjudication prompt builder (shared)
     tools.ts                            Typed sandboxed git/file tools + evidence tracker
     prompt.ts                  Review prompt builder (shared)
     parse-verdict.ts           VERDICT/SUMMARY parser (shared)
@@ -441,5 +489,6 @@ templates/skills/thermo-nuclear/SKILL.md   Bundled review skill
 ## Acknowledgments
 
 - Review rubric from [cursor-team-kit](https://github.com/cursor/cursor-team-kit) thermo-nuclear skill
-- Built with [@cursor/sdk](https://cursor.com/docs/sdk/typescript) and the OpenAI Responses API
+- Built with [@cursor/sdk](https://cursor.com/docs/sdk/typescript), the OpenAI Responses API, and the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)
 - Experimental "Sign in with ChatGPT" OAuth flow modeled on the [OpenAI Codex CLI](https://developers.openai.com/codex/auth)
+- Multi-model amalgamation design and sources documented in [docs/review-methodologies.md](docs/review-methodologies.md)

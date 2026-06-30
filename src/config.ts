@@ -13,8 +13,12 @@ export const GIT_TEMPLATE_HOOKS_DIR = join(GIT_TEMPLATE_DIR, "hooks");
 
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
 export const DEFAULT_OPENAI_REASONING_EFFORT = "medium";
-const CONFIG_KEYS = ["provider", "skillPath", "openaiModel", "openaiAuth"] as const;
-const PROVIDERS = ["cursor", "openai"] as const satisfies readonly ProviderId[];
+// Claude CLI model alias for the `claude`/`panel` providers. `opus` resolves to the
+// latest Opus — the strongest reviewer — at the cost of higher latency/spend per push.
+// Override to `sonnet` via THERMO_REVIEW_CLAUDE_MODEL for a faster, cheaper gate.
+const DEFAULT_CLAUDE_MODEL = "opus";
+const CONFIG_KEYS = ["provider", "skillPath", "openaiModel", "openaiAuth", "claudeModel"] as const;
+const PROVIDERS = ["cursor", "openai", "claude", "panel"] as const satisfies readonly ProviderId[];
 const OPENAI_AUTH_MODES = ["chatgpt", "api"] as const;
 
 export type OpenAIAuthMode = (typeof OPENAI_AUTH_MODES)[number];
@@ -40,6 +44,7 @@ interface ThermoConfig {
   skillPath?: string;
   openaiModel?: string;
   openaiAuth?: OpenAIAuthMode;
+  claudeModel?: string;
 }
 
 let configCache: ThermoConfig | undefined;
@@ -56,7 +61,10 @@ function assertKnownConfigKeys(obj: Record<string, unknown>): void {
   }
 }
 
-function optionalConfigString(obj: Record<string, unknown>, key: "skillPath" | "openaiModel"): string | undefined {
+function optionalConfigString(
+  obj: Record<string, unknown>,
+  key: "skillPath" | "openaiModel" | "claudeModel",
+): string | undefined {
   const value = obj[key];
   if (value === undefined) {
     return undefined;
@@ -124,6 +132,10 @@ function readConfigFile(): ThermoConfig {
   const openaiAuth = optionalConfigEnum(obj, "openaiAuth", OPENAI_AUTH_MODES);
   if (openaiAuth) {
     config.openaiAuth = openaiAuth;
+  }
+  const claudeModel = optionalConfigString(obj, "claudeModel");
+  if (claudeModel) {
+    config.claudeModel = claudeModel;
   }
   return config;
 }
@@ -305,6 +317,29 @@ export function openaiModel(): string {
 /** Wall-clock ceiling for an OpenAI review run, so a stalled stream can't hang. */
 export function openaiTimeoutMs(): number {
   const raw = process.env["THERMO_REVIEW_OPENAI_TIMEOUT_MS"];
+  const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(n) && n > 0 ? n : 300_000;
+}
+
+/**
+ * Model alias/id for the Claude CLI (`claude`/`panel` providers): env > config >
+ * default. Accepts an alias (`sonnet`, `opus`, `haiku`) or a full model id.
+ */
+export function claudeModel(): string {
+  const fromEnv = process.env["THERMO_REVIEW_CLAUDE_MODEL"]?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  const fromConfig = loadConfigFile().claudeModel?.trim();
+  if (fromConfig) {
+    return fromConfig;
+  }
+  return DEFAULT_CLAUDE_MODEL;
+}
+
+/** Wall-clock ceiling for a `claude -p` review run, so a stalled CLI can't hang the push. */
+export function claudeTimeoutMs(): number {
+  const raw = process.env["THERMO_REVIEW_CLAUDE_TIMEOUT_MS"];
   const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
   return Number.isFinite(n) && n > 0 ? n : 300_000;
 }

@@ -1,6 +1,6 @@
 export type Verdict = "PASS" | "BLOCK";
 
-export type ProviderId = "cursor" | "openai";
+export type ProviderId = "cursor" | "openai" | "claude" | "panel";
 
 export interface ReviewScope {
   repoRoot: string;
