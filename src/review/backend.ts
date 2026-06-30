@@ -23,7 +23,7 @@ export interface BackendCapabilities {
   /** Must be true for the thermo pre-push gate; diff-only summarizers fail closed. */
   readonly canInspectRepository: boolean;
   /** Human-readable inspection mechanism used in progress/docs. */
-  readonly inspection: "local-agent" | "sandboxed-tools" | "diff-only";
+  readonly inspection: "local-agent" | "sandboxed-tools" | "diff-only" | "composite";
   /** Tool names or built-in access path available to the model. */
   readonly tools: readonly string[];
 }

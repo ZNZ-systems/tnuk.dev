@@ -17,14 +17,16 @@ async function readStdin(): Promise<string> {
   return readFileSync(0, "utf8");
 }
 
+const PROVIDER_VALUES: readonly ProviderId[] = ["cursor", "openai", "claude", "panel"];
+
 function parseProvider(value: string | undefined): ProviderId | undefined {
   if (value === undefined) {
     return undefined;
   }
-  if (value === "cursor" || value === "openai") {
-    return value;
+  if ((PROVIDER_VALUES as readonly string[]).includes(value)) {
+    return value as ProviderId;
   }
-  process.stderr.write("Error: --provider must be 'cursor' or 'openai'\n");
+  process.stderr.write(`Error: --provider must be one of: ${PROVIDER_VALUES.join(", ")}\n`);
   process.exit(1);
 }
 
@@ -32,14 +34,16 @@ const program = new Command();
 
 program
   .name("thermo-review")
-  .description("Thermo-nuclear code quality review (pre-push gate) via Cursor or OpenAI")
+  .description(
+    "Thermo-nuclear code quality review (pre-push gate) via OpenAI, Claude, Cursor, or a multi-model panel",
+  )
   .version("0.1.0");
 
 program
   .command("review")
   .description("Run thermo-nuclear review on current branch changes")
   .option("--base <ref>", "Base branch ref (default: auto-detect main/master)")
-  .option("--provider <name>", "Review backend: openai (default) or cursor")
+  .option("--provider <name>", "Review backend: openai (default), claude, cursor, or panel")
   .option("--json", "Output machine-readable JSON")
   .option("--quiet", "Print only verdict line")
   .option("--skip", "Skip review (exit 0)")
@@ -124,7 +128,7 @@ hookCmd
   .command("run")
   .description("Run review from pre-push hook context (internal)")
   .option("--base <ref>", "Base branch ref override")
-  .option("--provider <name>", "Review backend: openai (default) or cursor")
+  .option("--provider <name>", "Review backend: openai (default), claude, cursor, or panel")
   .action(async (opts: { base?: string; provider?: string }) => {
     if (shouldSkipReview(false)) {
       process.exit(0);
@@ -154,20 +158,32 @@ program.addHelpText(
   `
 Examples:
   thermo-review review
-  thermo-review review --provider openai
+  thermo-review review --provider claude     # review via the local claude -p CLI
+  thermo-review review --provider panel      # Claude reviews, ChatGPT adjudicates (amalgamated)
   thermo-review login                       # Sign in with ChatGPT (default OpenAI auth mode)
-  THERMO_REVIEW_PROVIDER=openai git push
+  THERMO_REVIEW_PROVIDER=panel git push
   THERMO_REVIEW_SKIP=1 git push
 
 Environment:
-  THERMO_REVIEW_PROVIDER       openai (default) | cursor
-  OPENAI_API_KEY               Official OpenAI API key (only with THERMO_REVIEW_OPENAI_AUTH=api)
-  THERMO_REVIEW_OPENAI_AUTH    chatgpt (default OAuth transport) | api (official API)
-  CURSOR_API_KEY               Cursor API key (required for --provider cursor)
-  THERMO_REVIEW_OPENAI_MODEL   Override the OpenAI model (default: gpt-5.5)
-  THERMO_REVIEW_SKILL_PATH     Path to a thermo-nuclear SKILL.md override
-  THERMO_REVIEW_SKIP=1         Skip review, allow push
-  THERMO_REVIEW_NO_TNUK=1      Disable the per-branch tnuk decisions ledger
+  THERMO_REVIEW_PROVIDER          openai (default) | claude | cursor | panel
+  OPENAI_API_KEY                  Official OpenAI API key (only with THERMO_REVIEW_OPENAI_AUTH=api)
+  THERMO_REVIEW_OPENAI_AUTH       chatgpt (default OAuth transport) | api (official API)
+  CURSOR_API_KEY                  Cursor API key (required for --provider cursor)
+  THERMO_REVIEW_OPENAI_MODEL      Override the OpenAI model (default: gpt-5.5)
+  THERMO_REVIEW_CLAUDE_MODEL      Override the Claude CLI model (default: opus)
+  THERMO_REVIEW_CLAUDE_EFFORT     Claude reasoning effort: low|medium|high|xhigh|max (default: high)
+  THERMO_REVIEW_CLAUDE_TIMEOUT_MS Claude review timeout in ms (default: 600000)
+  THERMO_REVIEW_CLAUDE_BIN        Absolute path to the claude binary if not on PATH
+  THERMO_REVIEW_SKILL_PATH        Path to a thermo-nuclear SKILL.md override
+  THERMO_REVIEW_SKIP=1            Skip review, allow push
+  THERMO_REVIEW_NO_TNUK=1         Disable the per-branch tnuk decisions ledger
+
+Providers:
+  openai   ChatGPT/Codex (or official API) tool loop with sandboxed git/file tools
+  claude   local 'claude -p' agent with read-only repo tools
+  cursor   local Cursor SDK agent
+  panel    amalgamation: Claude reviews first, ChatGPT independently adjudicates
+           its findings into one verdict (uses the Claude + OpenAI settings above)
 `,
 );
 

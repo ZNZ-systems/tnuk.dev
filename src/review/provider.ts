@@ -18,6 +18,14 @@ export async function resolveBackend(explicit?: ProviderId): Promise<ReviewBacke
       const { CursorBackend } = await import("./backends/cursor.js");
       return new CursorBackend();
     }
+    case "claude": {
+      const { ClaudeBackend } = await import("./backends/claude.js");
+      return new ClaudeBackend();
+    }
+    case "panel": {
+      const { PanelBackend } = await import("./backends/panel.js");
+      return new PanelBackend();
+    }
     default: {
       const exhaustive: never = provider;
       throw new Error(`Unknown provider: ${String(exhaustive)}`);
