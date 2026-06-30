@@ -40,6 +40,12 @@ test("sanitizePeerReview withholds the peer's VERDICT and SUMMARY lines (anti-an
   assert.match(out, /leaks UI concerns/);
 });
 
+test("sanitizePeerReview withholds ANY verdict label, not just PASS/BLOCK", () => {
+  const out = sanitizePeerReview("VERDICT: NEEDS-WORK\nSUMMARY: x\n1. a real finding survives");
+  assert.ok(!/^\s*VERDICT:/im.test(out), "any VERDICT line is stripped so no conclusion leaks");
+  assert.match(out, /a real finding survives/);
+});
+
 test("sanitizePeerReview drops the peer's decisions ledger block and defangs markers", () => {
   const out = sanitizePeerReview(peerReview);
   assert.ok(!out.includes(ledger.DECISIONS_START), "decisions block removed");

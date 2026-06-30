@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-import { claudeModel, claudeTimeoutMs } from "../../config.js";
+import { claudeModel, claudeReasoningEffort, claudeTimeoutMs } from "../../config.js";
 import {
   BackendError,
   type BackendRunInput,
@@ -42,6 +42,10 @@ const MISSING_CLI_MESSAGE =
   "  Install Claude Code: https://docs.claude.com/en/docs/claude-code/overview\n" +
   "  then sign in (`claude` once, or `claude setup-token` for hooks/CI),\n" +
   "  or point THERMO_REVIEW_CLAUDE_BIN at its absolute path.";
+
+const NOT_SIGNED_IN_MESSAGE =
+  "Not signed in to Claude Code.\n" +
+  "  Run `claude` once to sign in, or `claude setup-token` for hooks/CI.";
 
 function snippet(text: string, max = 200): string {
   const collapsed = text.replace(/\s+/g, " ").trim();
@@ -85,11 +89,18 @@ export function parseClaudeCliResult(stdout: string): ClaudeCliResult {
   const obj = parsed as Record<string, unknown>;
   const sessionId = typeof obj["session_id"] === "string" ? obj["session_id"] : undefined;
   const result = typeof obj["result"] === "string" ? obj["result"] : "";
+  const type = typeof obj["type"] === "string" ? obj["type"] : undefined;
   const subtype = typeof obj["subtype"] === "string" ? obj["subtype"] : undefined;
 
-  if (obj["is_error"] === true || (subtype !== undefined && subtype !== "success")) {
-    const detail = result.trim() || subtype || "unknown error";
-    return { text: "", sessionId, error: `claude -p did not succeed (${subtype ?? "error"}): ${snippet(detail)}` };
+  // Require the explicit success envelope. A missing/other type or subtype (a malformed
+  // or future CLI shape) must fail closed, never slip through as review text.
+  if (obj["is_error"] === true || type !== "result" || subtype !== "success") {
+    const detail = result.trim() || subtype || type || "unknown error";
+    return {
+      text: "",
+      sessionId,
+      error: `claude -p did not return a success result envelope (type=${type ?? "?"}, subtype=${subtype ?? "?"}): ${snippet(detail)}`,
+    };
   }
   if (!result.trim()) {
     return { text: "", sessionId, error: "claude -p returned success with an empty result" };
@@ -189,21 +200,27 @@ export class ClaudeBackend implements ReviewBackend {
   } as const;
 
   async preflight(): Promise<void> {
-    const probe = await runClaudeCli(["--version"], "", process.cwd(), 15_000);
+    // `claude auth status` exercises the same install + sign-in path a review needs —
+    // a bare `--version` would report "ready" even when the first review fails on auth.
+    // It prints JSON ({"loggedIn":true,...}) and is a local check (no model call).
+    const probe = await runClaudeCli(["auth", "status"], "", process.cwd(), 15_000);
     if (probe.spawnError?.code === "ENOENT") {
       throw new BackendError(MISSING_CLI_MESSAGE, "config");
     }
-    if (probe.timedOut || probe.code !== 0) {
-      throw new BackendError(
-        `Claude CLI did not respond to --version (exit ${String(probe.code)}). ` +
-          "Ensure Claude Code is installed and on PATH, or set THERMO_REVIEW_CLAUDE_BIN.",
-        "config",
-      );
+    if (probe.timedOut) {
+      throw new BackendError("Claude CLI did not respond to `auth status` (timed out).", "config");
+    }
+    // Trust the explicit flag when present; fall back to the exit code otherwise.
+    const match = /"loggedIn"\s*:\s*(true|false)/.exec(probe.stdout);
+    const loggedIn = match ? match[1] === "true" : probe.code === 0;
+    if (!loggedIn) {
+      throw new BackendError(NOT_SIGNED_IN_MESSAGE, "config");
     }
   }
 
   async run({ scope, prompt, onProgress }: BackendRunInput): Promise<BackendRunOutput> {
     const model = claudeModel();
+    const effort = claudeReasoningEffort();
     const timeoutMs = claudeTimeoutMs();
     const args = [
       "-p",
@@ -211,6 +228,8 @@ export class ClaudeBackend implements ReviewBackend {
       "json",
       "--model",
       model,
+      "--effort",
+      effort,
       "--max-turns",
       String(MAX_TURNS),
       // Variadic; keep LAST so it consumes every tool spec and nothing else.
@@ -218,7 +237,9 @@ export class ClaudeBackend implements ReviewBackend {
       ...READ_ONLY_TOOLS,
     ];
 
-    onProgress(`contacting Claude via claude -p (model=${model}, read-only repo tools)…`);
+    onProgress(
+      `contacting Claude via claude -p (model=${model}, ${effort} reasoning, read-only repo tools)…`,
+    );
 
     const run = await runClaudeCli(args, prompt, scope.repoRoot, timeoutMs);
 

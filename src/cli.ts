@@ -165,22 +165,25 @@ Examples:
   THERMO_REVIEW_SKIP=1 git push
 
 Environment:
-  THERMO_REVIEW_PROVIDER       openai (default) | claude | cursor | panel
-  OPENAI_API_KEY               Official OpenAI API key (only with THERMO_REVIEW_OPENAI_AUTH=api)
-  THERMO_REVIEW_OPENAI_AUTH    chatgpt (default OAuth transport) | api (official API)
-  CURSOR_API_KEY               Cursor API key (required for --provider cursor)
-  THERMO_REVIEW_OPENAI_MODEL   Override the OpenAI model (default: gpt-5.5)
-  THERMO_REVIEW_CLAUDE_MODEL   Override the Claude CLI model (default: opus)
-  THERMO_REVIEW_SKILL_PATH     Path to a thermo-nuclear SKILL.md override
-  THERMO_REVIEW_SKIP=1         Skip review, allow push
-  THERMO_REVIEW_NO_TNUK=1      Disable the per-branch tnuk decisions ledger
+  THERMO_REVIEW_PROVIDER          openai (default) | claude | cursor | panel
+  OPENAI_API_KEY                  Official OpenAI API key (only with THERMO_REVIEW_OPENAI_AUTH=api)
+  THERMO_REVIEW_OPENAI_AUTH       chatgpt (default OAuth transport) | api (official API)
+  CURSOR_API_KEY                  Cursor API key (required for --provider cursor)
+  THERMO_REVIEW_OPENAI_MODEL      Override the OpenAI model (default: gpt-5.5)
+  THERMO_REVIEW_CLAUDE_MODEL      Override the Claude CLI model (default: opus)
+  THERMO_REVIEW_CLAUDE_EFFORT     Claude reasoning effort: low|medium|high|xhigh|max (default: high)
+  THERMO_REVIEW_CLAUDE_TIMEOUT_MS Claude review timeout in ms (default: 300000)
+  THERMO_REVIEW_CLAUDE_BIN        Absolute path to the claude binary if not on PATH
+  THERMO_REVIEW_SKILL_PATH        Path to a thermo-nuclear SKILL.md override
+  THERMO_REVIEW_SKIP=1            Skip review, allow push
+  THERMO_REVIEW_NO_TNUK=1         Disable the per-branch tnuk decisions ledger
 
 Providers:
   openai   ChatGPT/Codex (or official API) tool loop with sandboxed git/file tools
   claude   local 'claude -p' agent with read-only repo tools
   cursor   local Cursor SDK agent
   panel    amalgamation: Claude reviews first, ChatGPT independently adjudicates
-           its findings into one verdict (set THERMO_REVIEW_PANEL_* to tune)
+           its findings into one verdict (uses the Claude + OpenAI settings above)
 `,
 );
 

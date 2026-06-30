@@ -34,17 +34,25 @@ test("treats an error subtype (e.g. max turns) as a failure, never a verdict", (
   assert.equal(out.text, "");
 });
 
-test("treats is_error:true as a failure even when subtype says success", () => {
-  const stdout = JSON.stringify({ subtype: "success", is_error: true, result: "partial output" });
+test("treats is_error:true as a failure even when the envelope says success", () => {
+  const stdout = JSON.stringify({ type: "result", subtype: "success", is_error: true, result: "partial output" });
   const out = parseClaudeCliResult(stdout);
-  assert.ok(out.error, "is_error overrides a success subtype");
+  assert.ok(out.error, "is_error overrides a success envelope");
   assert.equal(out.text, "");
 });
 
 test("treats a success envelope with empty result as a failure (fail closed)", () => {
-  const stdout = JSON.stringify({ subtype: "success", is_error: false, result: "   " });
+  const stdout = JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "   " });
   const out = parseClaudeCliResult(stdout);
   assert.ok(out.error, "empty result is not a usable review");
+});
+
+test("a payload missing the explicit type:result/subtype:success envelope fails closed", () => {
+  // A non-empty result without the explicit success envelope (malformed or future CLI
+  // shape) must never slip through as review text.
+  assert.ok(parseClaudeCliResult(JSON.stringify({ result: "VERDICT: PASS\nlooks fine" })).error, "no type/subtype");
+  assert.ok(parseClaudeCliResult(JSON.stringify({ type: "result", result: "VERDICT: PASS" })).error, "missing subtype");
+  assert.ok(parseClaudeCliResult(JSON.stringify({ subtype: "success", result: "VERDICT: PASS" })).error, "missing type");
 });
 
 test("non-JSON stdout (e.g. a CLI crash banner) is a failure, not parsed as a review", () => {

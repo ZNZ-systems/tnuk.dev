@@ -48,12 +48,11 @@ export function sanitizePeerReview(rawText: string): string {
   }
 
   // 1. Withhold the peer's verdict + summary lines so the adjudicator judges evidence,
-  //    not the conclusion.
+  //    not the conclusion. Strip ANY `VERDICT:` label, not just PASS/BLOCK — any other
+  //    verdict word would otherwise leak the peer's conclusion past the anti-anchoring guard.
   text = text
     .split("\n")
-    .filter(
-      (line) => !/^\s*VERDICT:\s*(PASS|BLOCK)\b/i.test(line) && !/^\s*SUMMARY:\s*\S/i.test(line),
-    )
+    .filter((line) => !/^\s*VERDICT:\s*\S/i.test(line) && !/^\s*SUMMARY:\s*\S/i.test(line))
     .join("\n");
 
   // 3. Defang markers/fence embedded in untrusted model output.

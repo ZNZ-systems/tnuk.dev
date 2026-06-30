@@ -17,6 +17,10 @@ export const DEFAULT_OPENAI_REASONING_EFFORT = "medium";
 // latest Opus — the strongest reviewer — at the cost of higher latency/spend per push.
 // Override to `sonnet` via THERMO_REVIEW_CLAUDE_MODEL for a faster, cheaper gate.
 const DEFAULT_CLAUDE_MODEL = "opus";
+// Reasoning effort passed to the Claude CLI (`--effort`). High by default: this is a
+// strict gate, so it trades latency/spend for the strongest reasoning.
+const DEFAULT_CLAUDE_REASONING_EFFORT = "high";
+const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 const CONFIG_KEYS = ["provider", "skillPath", "openaiModel", "openaiAuth", "claudeModel"] as const;
 const PROVIDERS = ["cursor", "openai", "claude", "panel"] as const satisfies readonly ProviderId[];
 const OPENAI_AUTH_MODES = ["chatgpt", "api"] as const;
@@ -342,6 +346,17 @@ export function claudeTimeoutMs(): number {
   const raw = process.env["THERMO_REVIEW_CLAUDE_TIMEOUT_MS"];
   const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
   return Number.isFinite(n) && n > 0 ? n : 300_000;
+}
+
+/** Reasoning effort for the Claude CLI (`--effort`): env > default ("high"). */
+export function claudeReasoningEffort(): string {
+  return (
+    envEnumValue(
+      "THERMO_REVIEW_CLAUDE_EFFORT",
+      process.env["THERMO_REVIEW_CLAUDE_EFFORT"]?.trim() || undefined,
+      CLAUDE_EFFORTS,
+    ) ?? DEFAULT_CLAUDE_REASONING_EFFORT
+  );
 }
 
 export function shouldSkipReview(explicitSkip: boolean): boolean {

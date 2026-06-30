@@ -99,7 +99,7 @@ claude setup-token  # long-lived token for hooks/CI
 thermo-review review --provider claude
 ```
 
-The model defaults to `opus` (the latest Opus — the strongest reviewer) and is overridable with `THERMO_REVIEW_CLAUDE_MODEL` (alias `opus`/`sonnet`/`haiku`, or a full model id) or the config-file `claudeModel` key. Override to `sonnet` for a faster, cheaper gate. Use a capable model: the gate's strict "verdict line first" output contract needs `opus`/`sonnet`; `haiku` is not recommended. If `claude` is not on PATH in your hook environment, set `THERMO_REVIEW_CLAUDE_BIN` to its absolute path. The run is bounded by `THERMO_REVIEW_CLAUDE_TIMEOUT_MS` (default 300000).
+The model defaults to `opus` (the latest Opus — the strongest reviewer) and is overridable with `THERMO_REVIEW_CLAUDE_MODEL` (alias `opus`/`sonnet`/`haiku`, or a full model id) or the config-file `claudeModel` key. Override to `sonnet` for a faster, cheaper gate. Reasoning effort defaults to `high` and is tunable with `THERMO_REVIEW_CLAUDE_EFFORT` (`low|medium|high|xhigh|max`). Use a capable model: the gate's strict "verdict line first" output contract needs `opus`/`sonnet`; `haiku` is not recommended. If `claude` is not on PATH in your hook environment, set `THERMO_REVIEW_CLAUDE_BIN` to its absolute path. The run is bounded by `THERMO_REVIEW_CLAUDE_TIMEOUT_MS` (default 300000).
 
 ### Cursor
 
