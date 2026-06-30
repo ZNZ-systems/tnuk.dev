@@ -341,11 +341,15 @@ export function claudeModel(): string {
   return DEFAULT_CLAUDE_MODEL;
 }
 
-/** Wall-clock ceiling for a `claude -p` review run, so a stalled CLI can't hang the push. */
+/**
+ * Wall-clock ceiling for a `claude -p` review run, so a stalled CLI can't hang the push.
+ * Generous by default (10 min) because the default `opus` + `high` reasoning is slow on a
+ * large diff; lower it (or the model/effort) for a snappier gate.
+ */
 export function claudeTimeoutMs(): number {
   const raw = process.env["THERMO_REVIEW_CLAUDE_TIMEOUT_MS"];
   const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
-  return Number.isFinite(n) && n > 0 ? n : 300_000;
+  return Number.isFinite(n) && n > 0 ? n : 600_000;
 }
 
 /** Reasoning effort for the Claude CLI (`--effort`): env > default ("high"). */

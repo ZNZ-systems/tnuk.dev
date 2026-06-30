@@ -1,6 +1,5 @@
 import { buildAmalgamationPrompt } from "../amalgamate.js";
 import {
-  BackendError,
   type BackendRunInput,
   type BackendRunOutput,
   type ProgressFn,
@@ -21,8 +20,12 @@ function prefixed(onProgress: ProgressFn, tag: string): ProgressFn {
  * the point: same-family consensus just amplifies shared blind spots, so the value is
  * in disagreement, not agreement (see amalgamate.ts for the anti-rubber-stamping design).
  *
- * The final verdict, ledger, and exit code all come from the ChatGPT (synthesizer) leg,
- * so the panel slots into run.ts exactly like any single backend.
+ * The panel is ATOMIC and fails closed: if the Claude leg fails (timeout, malformed
+ * output, auth), the error propagates and run.ts blocks the push — it never silently
+ * downgrades to a single-model review, which would change the advertised semantics and
+ * could let through a push the full panel would not. The final verdict, ledger, and exit
+ * code come from the ChatGPT (synthesizer) leg, so the panel slots into run.ts like any
+ * single backend.
  */
 export class PanelBackend implements ReviewBackend {
   readonly id = "panel" as const;
@@ -42,46 +45,23 @@ export class PanelBackend implements ReviewBackend {
   }
 
   async run({ scope, prompt, onProgress }: BackendRunInput): Promise<BackendRunOutput> {
+    // Atomic two-stage review. The Claude leg's errors propagate (fail closed): a gate
+    // must not silently fall back to a weaker single-model review when adjudication was
+    // requested. preflight() already verified both legs are ready.
     onProgress("panel stage 1/2 — Claude first-pass review…");
+    const peer = await this.reviewer.run({
+      scope,
+      prompt,
+      onProgress: prefixed(onProgress, "claude"),
+    });
 
-    let peerReview = "";
-    let peerRunId: string | undefined;
-    try {
-      const peer = await this.reviewer.run({
-        scope,
-        prompt,
-        onProgress: prefixed(onProgress, "claude"),
-      });
-      peerReview = peer.rawText;
-      peerRunId = peer.runId;
-    } catch (err) {
-      // A setup problem (Claude missing / not signed in) is the user's to fix — surface it.
-      // A transient agent failure must not block the push: degrade to a ChatGPT-only review
-      // rather than failing the gate, and say so loudly.
-      if (err instanceof BackendError && err.kind === "config") {
-        throw err;
-      }
-      const message = err instanceof Error ? err.message : String(err);
-      onProgress(`panel: Claude leg failed (${message}); falling back to ChatGPT-only review`);
-    }
-
-    const stage2 = peerReview
-      ? "panel stage 2/2 — ChatGPT adjudicating the first-pass findings…"
-      : "panel stage 2/2 — ChatGPT review (single model; Claude leg unavailable)…";
-    onProgress(stage2);
-
-    const finalPrompt = peerReview ? buildAmalgamationPrompt(prompt, peerReview) : prompt;
+    onProgress("panel stage 2/2 — ChatGPT adjudicating the first-pass findings…");
     const finalOut = await this.synthesizer.run({
       scope,
-      prompt: finalPrompt,
+      prompt: buildAmalgamationPrompt(prompt, peer.rawText),
       onProgress: prefixed(onProgress, "chatgpt"),
     });
 
-    return {
-      rawText: finalOut.rawText,
-      runId: finalOut.runId,
-      // Surface the first-pass run id when the panel actually ran both legs.
-      agentId: peerRunId ?? finalOut.agentId,
-    };
+    return { rawText: finalOut.rawText, runId: finalOut.runId, agentId: peer.runId };
   }
 }

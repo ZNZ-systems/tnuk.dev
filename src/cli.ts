@@ -172,7 +172,7 @@ Environment:
   THERMO_REVIEW_OPENAI_MODEL      Override the OpenAI model (default: gpt-5.5)
   THERMO_REVIEW_CLAUDE_MODEL      Override the Claude CLI model (default: opus)
   THERMO_REVIEW_CLAUDE_EFFORT     Claude reasoning effort: low|medium|high|xhigh|max (default: high)
-  THERMO_REVIEW_CLAUDE_TIMEOUT_MS Claude review timeout in ms (default: 300000)
+  THERMO_REVIEW_CLAUDE_TIMEOUT_MS Claude review timeout in ms (default: 600000)
   THERMO_REVIEW_CLAUDE_BIN        Absolute path to the claude binary if not on PATH
   THERMO_REVIEW_SKILL_PATH        Path to a thermo-nuclear SKILL.md override
   THERMO_REVIEW_SKIP=1            Skip review, allow push

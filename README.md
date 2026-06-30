@@ -99,7 +99,7 @@ claude setup-token  # long-lived token for hooks/CI
 thermo-review review --provider claude
 ```
 
-The model defaults to `opus` (the latest Opus — the strongest reviewer) and is overridable with `THERMO_REVIEW_CLAUDE_MODEL` (alias `opus`/`sonnet`/`haiku`, or a full model id) or the config-file `claudeModel` key. Override to `sonnet` for a faster, cheaper gate. Reasoning effort defaults to `high` and is tunable with `THERMO_REVIEW_CLAUDE_EFFORT` (`low|medium|high|xhigh|max`). Use a capable model: the gate's strict "verdict line first" output contract needs `opus`/`sonnet`; `haiku` is not recommended. If `claude` is not on PATH in your hook environment, set `THERMO_REVIEW_CLAUDE_BIN` to its absolute path. The run is bounded by `THERMO_REVIEW_CLAUDE_TIMEOUT_MS` (default 300000).
+The model defaults to `opus` (the latest Opus — the strongest reviewer) and is overridable with `THERMO_REVIEW_CLAUDE_MODEL` (alias `opus`/`sonnet`/`haiku`, or a full model id) or the config-file `claudeModel` key. Override to `sonnet` for a faster, cheaper gate. Reasoning effort defaults to `high` and is tunable with `THERMO_REVIEW_CLAUDE_EFFORT` (`low|medium|high|xhigh|max`). Use a capable model: the gate's strict "verdict line first" output contract needs `opus`/`sonnet`; `haiku` is not recommended. If `claude` is not on PATH in your hook environment, set `THERMO_REVIEW_CLAUDE_BIN` to its absolute path. The run is bounded by `THERMO_REVIEW_CLAUDE_TIMEOUT_MS` (default 600000 — generous because opus+high is slow on a large diff).
 
 ### Cursor
 
@@ -124,7 +124,7 @@ The non-obvious part is making the second model *refine* rather than rubber-stam
 - **Per-item CONFIRM / REFUTE / REFINE**, each tied to a concrete failure scenario, with explicit license to call false positives.
 - **Neutral attribution** ("an independent first-pass reviewer") so it doesn't defer to "the other model".
 
-The final verdict, summary, and decisions ledger all come from the ChatGPT (adjudicator) leg, so `panel` behaves like any single backend to the rest of the gate. If the Claude leg has a transient failure the panel degrades to a ChatGPT-only review (with a warning) rather than blocking your push; a Claude *setup* error (not installed / not signed in) surfaces up front. Requires both Claude sign-in and OpenAI auth.
+The final verdict, summary, and decisions ledger all come from the ChatGPT (adjudicator) leg, so `panel` behaves like any single backend to the rest of the gate. The panel is **atomic and fails closed**: if the Claude leg fails (timeout, malformed output, or auth), the push is blocked rather than silently downgrading to a single-model review — when you ask for two-model adjudication and it can't happen, the gate must not quietly review with one model and maybe pass. Requires both Claude sign-in and OpenAI auth.
 
 ```bash
 thermo-review review --provider panel
